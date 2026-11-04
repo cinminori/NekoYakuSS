@@ -91,9 +91,6 @@
       TAG + '.ny-fail{border-left-style:double!important;border-left-width:.3em!important;}' +
       TAG + '{-webkit-user-select:none!important;user-select:none!important;}'; // 長按留給選單
     if (cfg.eink) s += TAG + '{font-weight:500!important;}';
-    // 譯文字型：網頁的韓文字型配中文常常很怪；generic 字族交給系統依 lang（繁中）挑字形
-    var fam = { sans: 'sans-serif', serif: 'serif', custom: '"NekoYakuTr", sans-serif' }[cfg.font];
-    if (fam) s += TAG + '{font-family:' + fam + '!important;}';
     if (cfg.mode === 'src') s += TAG + '{display:none!important;}';
     if (cfg.mode === 'tr') {
       // 只看譯文：原文縮成 0 並隱藏，譯文照常顯示（visibility 可以被子元素蓋回來）
@@ -134,6 +131,7 @@
     }
     styledRoots.add(root);
     var doc = root.nodeType === 9 ? root : root.ownerDocument;
+    if (doc !== root) ensureStyle(doc); // @font-face 只有放在 document 才有效
     var st = doc.createElement('style');
     st.setAttribute('data-ny-style', '1');
     st.__nyRoot = root;
@@ -629,6 +627,11 @@
   function sizeNode(r) {
     if (!r.fs) r.fs = 16;
     r.node.style.setProperty('font-size', (r.fs * cfg.scale).toFixed(1) + 'px', 'important');
+    // 譯文字型：網頁的韓文字型配中文常常很怪；generic 字族交給系統依 lang（繁中）挑字形。
+    // 用行內樣式：mrblue 的 `div[data-id] *{font-family:…!important}` 權重比 ny-tr 選擇器高
+    var fam = { sans: 'sans-serif', serif: 'serif', custom: '"NekoYakuTr", sans-serif' }[cfg.font];
+    if (fam) r.node.style.setProperty('font-family', fam, 'important');
+    else r.node.style.removeProperty('font-family');
     colorNode(r);
   }
   /** 原文現在的字級。「只看譯文」的 CSS 把原文壓成 0，要暫時拿掉標記才量得到（同步量完放回，不會畫出來）。 */
@@ -756,6 +759,7 @@
     var gap = String.fromCharCode(0x3000, 0x3000, 0x3000);
     var span = r.node.ownerDocument.createElement('span');
     span.className = 'ny-mq-in';
+    span.style.setProperty('font-family', 'inherit', 'important'); // 網站的 `*` 規則會蓋到內層
     span.textContent = new Array(copies + 1).join(tr + gap);
     span.style.setProperty('--ny-mq-dur', Math.max(8, Math.round((tr.length + 3) * copies / 2 * 0.35)) + 's');
     r.node.textContent = '';

@@ -221,6 +221,36 @@ async function testOccurrenceOverride(browser) {
   await page.close();
 }
 
+async function testTranslationFont(browser) {
+  console.log('譯文字型：蓋過網站規則、shadow DOM 的網站也宣告自訂字型');
+  const paras = Array.from({ length: 8 }, (_, i) => `<p id="text_${i}">${KO(i)}</p>`).join('');
+  const cfg = { roots: ['#viewer'], paras: 'p[id^="text_"]', minParas: 3, pathRe: '^/viewer/([^/]+)/([^/]+)/?$', auto: true, font: 'serif' };
+  // mrblue：高權重的 !important 規則
+  const page = await openPage(browser, 'https://www.mrblue.com/viewer/book/1', `<!doctype html><html><head><style>div[data-id="x"] *{font-family:monospace!important}</style></head><body><div id="viewer" data-id="x">${paras}</div></body></html>`, ECHO_BRIDGE);
+  await inject(page, cfg);
+  await page.waitForTimeout(800);
+  const fam = await page.evaluate(() => getComputedStyle(document.querySelector('#text_0 ny-tr')).fontFamily);
+  check('網站高權重規則蓋不過譯文字型', fam === 'serif', fam);
+  await page.close();
+  // 跟隨網頁：不強制
+  const p2 = await openPage(browser, 'https://www.mrblue.com/viewer/book/1', `<!doctype html><html><head><style>div[data-id="x"] *{font-family:monospace!important}</style></head><body><div id="viewer" data-id="x">${paras}</div></body></html>`, ECHO_BRIDGE);
+  await inject(p2, { ...cfg, font: 'inherit' });
+  await p2.waitForTimeout(800);
+  const fam2 = await p2.evaluate(() => getComputedStyle(document.querySelector('#text_0 ny-tr')).fontFamily);
+  check('跟隨網頁時用網站字型', fam2 === 'monospace', fam2);
+  await p2.close();
+  // kakaopage：正文在 shadow DOM，@font-face 只有放在主文件才有效
+  const body = `<!doctype html><html><body><div id="host"></div><script>
+    document.getElementById('host').attachShadow({ mode: 'open' }).innerHTML = '<div>' + Array.from({ length: 8 }, (_, i) => '<p>' + ${JSON.stringify(KO('X'))}.replace('X', i) + '</p>').join('') + '</div>';
+    </script></body></html>`;
+  const p3 = await openPage(browser, 'https://page.kakao.com/content/1/viewer/2/', body, ECHO_BRIDGE);
+  await inject(p3, { roots: [], shadow: true, paras: 'p', minParas: 5, pathRe: KAKAO_RE, auto: true, font: 'custom' });
+  await p3.waitForTimeout(800);
+  const face = await p3.evaluate(() => [...document.querySelectorAll('[data-ny-style]')].some((s) => s.textContent.includes('@font-face')));
+  check('shadow DOM 的網站在主文件宣告自訂字型', face);
+  await p3.close();
+}
+
 async function testRidi(browser) {
   console.log('ridi：#viewer_contents、聊天泡泡、表格');
   const paras = Array.from({ length: 40 }, (_, i) => '<p>' + KO(i) + '</p>').join('');
@@ -384,6 +414,7 @@ async function testAutoRetry(browser) {
     await testHugeChapter(browser);
     await testVolumePaging(browser);
     await testOccurrenceOverride(browser);
+    await testTranslationFont(browser);
     await testImagesAndColor(browser);
     await testMarquee(browser);
     await testPagedForceScroll(browser);
