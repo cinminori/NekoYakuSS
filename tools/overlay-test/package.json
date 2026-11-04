@@ -1,0 +1,12 @@
+{
+  "name": "nekoyakuss-overlay-test",
+  "private": true,
+  "description": "assets/overlay.js 的 Chromium 模擬頁測試（不連真實網站）",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "test": "node overlay.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
+  }
+}

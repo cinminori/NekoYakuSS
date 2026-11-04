@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 前景透明、內容畫滿畫布。inset 18% 把內容縮到 64%（69dp），
+     內容的外接圓落在圓形遮罩安全區（66dp）內，貓耳與書角不會被切掉。 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:inset="18%" />

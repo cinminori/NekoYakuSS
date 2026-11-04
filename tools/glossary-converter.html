@@ -1,0 +1,436 @@
+<title>NekoYakuSS 名詞表轉換器</title>
+<style>
+  :root, :root[data-theme="light"] {
+    --paper: #F1F2EE;
+    --surface: #FBFBF8;
+    --surface-2: #F5F6F1;
+    --ink: #1E2522;
+    --ink-soft: #5C645E;
+    --ink-faint: #8A928C;
+    --line: #DDE0D9;
+    --line-strong: #C9CDC3;
+    --accent: #3C8877;
+    --accent-ink: #2B655A;
+    --accent-wash: #E5EFE9;
+    --warn: #B57A2E;
+    --warn-ink: #8A5C1E;
+    --warn-wash: #F4EBD9;
+    --shadow: 0 1px 2px rgba(30,37,34,.04), 0 8px 24px rgba(30,37,34,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121613;
+      --surface: #1B211E;
+      --surface-2: #222925;
+      --ink: #E7EAE4;
+      --ink-soft: #99A199;
+      --ink-faint: #6B736C;
+      --line: #2B322D;
+      --line-strong: #3A423C;
+      --accent: #61B49E;
+      --accent-ink: #82C8B4;
+      --accent-wash: #1D2A26;
+      --warn: #D6A24E;
+      --warn-ink: #E4BC7A;
+      --warn-wash: #2A2417;
+      --shadow: 0 1px 2px rgba(0,0,0,.2), 0 10px 30px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121613;
+    --surface: #1B211E;
+    --surface-2: #222925;
+    --ink: #E7EAE4;
+    --ink-soft: #99A199;
+    --ink-faint: #6B736C;
+    --line: #2B322D;
+    --line-strong: #3A423C;
+    --accent: #61B49E;
+    --accent-ink: #82C8B4;
+    --accent-wash: #1D2A26;
+    --warn: #D6A24E;
+    --warn-ink: #E4BC7A;
+    --warn-wash: #2A2417;
+    --shadow: 0 1px 2px rgba(0,0,0,.2), 0 10px 30px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  :root {
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: clamp(20px, 4vw, 44px) clamp(16px, 4vw, 32px) 64px; }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+  .titles { min-width: 0; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent-ink); font-weight: 600; margin: 0 0 6px;
+  }
+  h1 {
+    font-size: clamp(1.5rem, 4.5vw, 2.05rem); line-height: 1.12; margin: 0;
+    letter-spacing: -.015em; text-wrap: balance; font-weight: 680;
+  }
+  .lede { color: var(--ink-soft); margin: 10px 0 0; max-width: 60ch; font-size: .95rem; }
+  .lede code { font-family: var(--mono); font-size: .86em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+  .theme-btn {
+    flex: none; appearance: none; cursor: pointer; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--ink-soft); border-radius: 8px;
+    width: 40px; height: 40px; font-size: 17px; line-height: 1; display: grid; place-items: center;
+    transition: border-color .15s, color .15s;
+  }
+  .theme-btn:hover { color: var(--ink); border-color: var(--accent); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: clamp(16px, 3vw, 22px); box-shadow: var(--shadow); margin-top: 22px;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card-head h2 { font-size: 1rem; margin: 0; font-weight: 640; letter-spacing: -.01em; }
+  .card-head .hint { font-size: 12.5px; color: var(--ink-faint); }
+
+  textarea {
+    width: 100%; min-height: 168px; resize: vertical; display: block;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 9px; padding: 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.7;
+    tab-size: 20;
+  }
+  textarea::placeholder { color: var(--ink-faint); }
+  textarea:focus-visible, select:focus-visible, button:focus-visible, .link:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 14px; }
+  .ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-soft); }
+  .ctl input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+  .ctl label { cursor: pointer; user-select: none; }
+  select {
+    appearance: none; background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 30px 6px 10px; font: inherit;
+    font-size: 13.5px; cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%), linear-gradient(135deg, var(--ink-soft) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  }
+  .spacer { flex: 1 1 auto; }
+  .link {
+    appearance: none; background: none; border: none; cursor: pointer; color: var(--accent-ink);
+    font: inherit; font-size: 13px; font-weight: 560; padding: 4px 2px; border-radius: 5px; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .link:hover { color: var(--accent); }
+
+  /* stats */
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .chip {
+    display: inline-flex; align-items: baseline; gap: 7px; padding: 7px 12px; border-radius: 8px;
+    background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; color: var(--ink-soft);
+  }
+  .chip b { font-size: 15px; font-weight: 680; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .chip.accent { background: var(--accent-wash); border-color: transparent; color: var(--accent-ink); }
+  .chip.accent b { color: var(--accent-ink); }
+  .chip.warn { background: var(--warn-wash); border-color: transparent; color: var(--warn-ink); }
+  .chip.warn b { color: var(--warn-ink); }
+  .chip.muted b { color: var(--ink-soft); }
+
+  /* review */
+  details.review { margin-top: 16px; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 9px; background: var(--surface); overflow: hidden; }
+  details.review summary {
+    cursor: pointer; padding: 12px 16px; font-size: 13.5px; font-weight: 580; color: var(--warn-ink);
+    list-style: none; display: flex; align-items: center; gap: 8px;
+  }
+  details.review summary::-webkit-details-marker { display: none; }
+  details.review summary .tri { transition: transform .18s; font-size: 11px; color: var(--warn); }
+  details.review[open] summary .tri { transform: rotate(90deg); }
+  .review-body { padding: 2px 16px 14px; }
+  .review-note { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 12px; }
+  .rrow { padding: 10px 0; border-top: 1px dashed var(--line-strong); font-size: 13px; }
+  .rrow:first-child { border-top: none; }
+  .rrow .src { font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; word-break: break-all; }
+  .rrow .src .arrow { color: var(--ink-faint); padding: 0 6px; }
+  .pairs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pair {
+    font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line);
+    padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  }
+  .pair .k { color: var(--ink); }
+  .pair .to { color: var(--accent); padding: 0 4px; }
+  .pair .z { color: var(--ink-soft); }
+
+  /* output */
+  .out-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .out-actions { display: flex; gap: 8px; }
+  button.btn {
+    appearance: none; cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 560;
+    border-radius: 8px; padding: 8px 15px; border: 1px solid transparent; transition: background .15s, border-color .15s, color .15s;
+  }
+  button.btn.primary { background: var(--accent); color: #fff; }
+  button.btn.primary:hover { background: var(--accent-ink); }
+  :root[data-theme="dark"] button.btn.primary, :root:not([data-theme="light"]) button.btn.primary { color: #0d1512; }
+  button.btn.ghost { background: transparent; color: var(--ink-soft); border-color: var(--line-strong); }
+  button.btn.ghost:hover { color: var(--ink); border-color: var(--accent); }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  pre.json {
+    margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+    max-height: 380px; overflow-y: auto; color: var(--ink);
+  }
+  pre.json .empty { color: var(--ink-faint); }
+
+  footer { margin-top: 28px; font-size: 12px; color: var(--ink-faint); line-height: 1.7; }
+  footer code { font-family: var(--mono); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+    background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 560;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; box-shadow: var(--shadow); z-index: 20;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 560px) {
+    .card-head .hint { width: 100%; }
+    .out-head { align-items: stretch; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="titles">
+      <p class="eyebrow">NekoYakuSS 工具</p>
+      <h1>名詞表轉換器</h1>
+      <p class="lede">把 Google Sheets 的韓中對照貼進來 → 產出 NekoYakuSS 可匯入的名詞表 JSON。一格用 <code>／</code> 塞的多個寫法會自動拆成獨立詞條、各自配對譯名；變體與譯名數量對不上的列會標「待確認」讓你核對。</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" title="切換深／淺色" aria-label="切換深淺色">◐</button>
+  </header>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>① 貼上試算表</h2>
+      <span class="hint">在 Google Sheets 選「韓文原名 + 建議譯名」兩欄，整段複製貼上（欄以 Tab 分隔）</span>
+    </div>
+    <textarea id="input" spellcheck="false" placeholder="정현／오정현／오쩡&#9;正賢／吳正賢／吳正&#10;서윤／한서윤&#9;書允／韓書允&#10;주 감독&#9;朱總教練"></textarea>
+    <div class="controls">
+      <span class="ctl"><input type="checkbox" id="optHeader" checked><label for="optHeader">第一列是標題，跳過</label></span>
+      <span class="ctl"><input type="checkbox" id="optSpace" checked><label for="optSpace">帶空格的變體補一筆無空格版</label></span>
+      <span class="ctl"><label for="optType">分類 type</label>
+        <select id="optType">
+          <option value="人名" selected>人名（照表固定）</option>
+          <option value="地名">地名</option>
+          <option value="組織">組織</option>
+          <option value="設定">設定</option>
+          <option value="稱呼">稱呼（依上下文靈活）</option>
+          <option value="">不指定</option>
+        </select>
+      </span>
+      <span class="spacer"></span>
+      <button class="link" id="sampleBtn">載入範例</button>
+      <button class="link" id="clearBtn">清空</button>
+    </div>
+  </section>
+
+  <div class="stats" id="stats" hidden></div>
+  <div id="reviewSlot"></div>
+
+  <section class="card">
+    <div class="out-head">
+      <h2 style="font-size:1rem;margin:0;font-weight:640;">② NekoYakuSS 名詞表 JSON</h2>
+      <div class="out-actions">
+        <button class="btn ghost" id="copyBtn" disabled>複製</button>
+        <button class="btn primary" id="dlBtn" disabled>下載 .json</button>
+      </div>
+    </div>
+    <pre class="json" id="output"><span class="empty">貼上資料後，這裡會即時產生 JSON。</span></pre>
+  </section>
+
+  <footer>
+    產出格式：<code>{ "terms": [ { "term": 韓文, "zh": 中譯, "type": 分類 } ] }</code>。<br>
+    匯入時會併進「你當下打開的那本書」（不看檔案裡的 bookId），同名詞以匯入的為準覆蓋。標了待確認的列會在該筆加 <code>note</code> 提醒——匯入後可在名詞表裡直接改。全程在你裝置本機運算，資料不外傳。
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var input = $("input"), output = $("output"), stats = $("stats"), reviewSlot = $("reviewSlot");
+  var copyBtn = $("copyBtn"), dlBtn = $("dlBtn");
+  var lastJson = "";
+
+  var SAMPLE = [
+    "韓文原名\t建議譯名",
+    "정현／오정현／오쩡\t正賢／吳正賢／吳正",
+    "서윤／한서윤\t書允／韓書允",
+    "의겸／최의겸\t義謙／崔義謙",
+    "이연／이 연／ 연이\t李延／延哥",
+    "록희\t洛熙",
+    "재희／윤재희\t在熙／尹在熙",
+    "주 감독\t朱總教練",
+    "요한／김요한\t耀漢／金耀漢",
+    "박 PD\t朴PD",
+    "규혁／장규혁\t奎赫／張奎赫",
+    "우재／정우재\t宇在／鄭宇在",
+    "신 코치\t申教練",
+    "최용／용이\t崔勇／勇哥"
+  ].join("\n");
+
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+
+  var SEP = /[／/、]/;
+
+  function convert(text, opts) {
+    var rows = text.split(/\r?\n/).filter(function (l) { return l.trim() !== ""; });
+    if (opts.skipHeader && rows.length) rows = rows.slice(1);
+
+    var seen = new Map();       // term -> {term, zh, note?}
+    var review = [];            // {kor, zh, pairs:[[k,z]]}
+    var dup = 0, expanded = 0, rowCount = 0;
+
+    function addTerm(term, zh, flagged) {
+      if (!term || !zh) return;
+      if (seen.has(term)) dup++;
+      var o = { term: term, zh: zh };
+      if (flagged) o.note = "待確認：多變體與譯名數量對不上，自動配對可能有誤";
+      seen.set(term, o);
+    }
+
+    rows.forEach(function (row) {
+      var cols = row.indexOf("\t") >= 0 ? row.split("\t") : row.split(",");
+      var korRaw = (cols[0] || "").trim();
+      var zhRaw = (cols[1] || "").trim();
+      if (!korRaw || !zhRaw) return;
+      var kor = korRaw.split(SEP).map(function (s) { return s.trim(); }).filter(Boolean);
+      var zh = zhRaw.split(SEP).map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!kor.length || !zh.length) return;
+      rowCount++;
+
+      // 數量不對等（且譯名不是「全部共用一個」）→ 標記待確認
+      var flagged = zh.length > 1 && kor.length !== zh.length;
+
+      var pairs = [];
+      for (var i = 0; i < kor.length; i++) {
+        var z = zh.length === 1 ? zh[0] : (i < zh.length ? zh[i] : zh[zh.length - 1]);
+        pairs.push([kor[i], z]);
+        addTerm(kor[i], z, flagged);
+        if (opts.expandSpaces && /\s/.test(kor[i])) {
+          var ns = kor[i].replace(/\s+/g, "");
+          if (ns && ns !== kor[i]) { addTerm(ns, z, flagged); expanded++; }
+        }
+      }
+      if (flagged) review.push({ kor: korRaw, zh: zhRaw, pairs: pairs });
+    });
+
+    var arr = Array.from(seen.values());
+    var terms = arr.map(function (o) {
+      var t = { term: o.term, zh: o.zh };
+      if (opts.type) t.type = opts.type;
+      if (o.note) t.note = o.note;
+      return t;
+    });
+
+    return {
+      json: JSON.stringify({ terms: terms }, null, 2),
+      count: terms.length, rows: rowCount, review: review, dup: dup, expanded: expanded
+    };
+  }
+
+  function chip(cls, num, label) {
+    return '<span class="chip ' + cls + '"><b>' + num + '</b>' + esc(label) + '</span>';
+  }
+
+  function renderReview(review) {
+    if (!review.length) { reviewSlot.innerHTML = ""; return; }
+    var rows = review.map(function (r) {
+      var pairs = r.pairs.map(function (p) {
+        return '<span class="pair"><span class="k">' + esc(p[0]) + '</span><span class="to">→</span><span class="z">' + esc(p[1]) + '</span></span>';
+      }).join("");
+      return '<div class="rrow"><div class="src">' + esc(r.kor) + '<span class="arrow">→</span>' + esc(r.zh) +
+        '</div><div class="pairs">' + pairs + '</div></div>';
+    }).join("");
+    reviewSlot.innerHTML =
+      '<details class="review" open><summary><span class="tri">▶</span>' +
+      review.length + ' 列需要你核對（變體數與譯名數不一致）</summary>' +
+      '<div class="review-body"><p class="review-note">下面這些列的韓文寫法比譯名多／少，工具先照順序配、多出的沿用最後一個譯名。請對照原文確認箭頭配對是否正確，匯入後也能在 App 名詞表裡直接改。</p>' +
+      rows + '</div></details>';
+  }
+
+  function run() {
+    var text = input.value;
+    var opts = {
+      skipHeader: $("optHeader").checked,
+      expandSpaces: $("optSpace").checked,
+      type: $("optType").value
+    };
+    if (!text.trim()) {
+      output.innerHTML = '<span class="empty">貼上資料後，這裡會即時產生 JSON。</span>';
+      stats.hidden = true; reviewSlot.innerHTML = "";
+      copyBtn.disabled = dlBtn.disabled = true; lastJson = "";
+      return;
+    }
+    var r = convert(text, opts);
+    lastJson = r.json;
+    output.textContent = r.json;
+
+    var html = chip("accent", r.count, "詞條") + chip("muted", r.rows, "來源列");
+    if (r.review.length) html += chip("warn", r.review.length, "待確認");
+    if (r.expanded) html += chip("muted", r.expanded, "補無空格");
+    if (r.dup) html += chip("muted", r.dup, "同詞覆蓋");
+    stats.innerHTML = html; stats.hidden = false;
+
+    renderReview(r.review);
+    copyBtn.disabled = dlBtn.disabled = (r.count === 0);
+  }
+
+  var toastT;
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 1800);
+  }
+
+  var deb;
+  input.addEventListener("input", function () { clearTimeout(deb); deb = setTimeout(run, 160); });
+  ["optHeader", "optSpace", "optType"].forEach(function (id) { $(id).addEventListener("change", run); });
+
+  $("sampleBtn").addEventListener("click", function () { input.value = SAMPLE; run(); });
+  $("clearBtn").addEventListener("click", function () { input.value = ""; input.focus(); run(); });
+
+  copyBtn.addEventListener("click", function () {
+    if (!lastJson) return;
+    navigator.clipboard.writeText(lastJson).then(
+      function () { toast("已複製 JSON"); },
+      function () { toast("複製失敗，請手動選取"); }
+    );
+  });
+
+  dlBtn.addEventListener("click", function () {
+    if (!lastJson) return;
+    var blob = new Blob([lastJson], { type: "application/json;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "nekoyakuss-glossary.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast("已下載 nekoyakuss-glossary.json");
+  });
+
+  // 主題切換
+  var themeBtn = $("themeBtn");
+  themeBtn.addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    var isDark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", isDark ? "light" : "dark");
+  });
+})();
+</script>

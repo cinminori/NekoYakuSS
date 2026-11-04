@@ -1,0 +1,39 @@
+name: 建置與測試
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  android:
+    name: 編譯 APK 與單元測試
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 編譯 debug APK、跑單元測試
+        run: ./gradlew assembleDebug testDebugUnitTest
+      - name: 上傳 debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NekoYakuSS-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+  overlay:
+    name: 注入腳本測試（Chromium 模擬頁）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/overlay-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm test

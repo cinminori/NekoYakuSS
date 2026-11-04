@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+.kotlin/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.apk
+*.keystore
+!debug.keystore
+/app/release/
+# release 簽章：金鑰與密碼只放本機
+keystore.properties
+*.jks

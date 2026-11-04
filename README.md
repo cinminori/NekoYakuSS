@@ -1,0 +1,96 @@
+# NekoYakuSS
+
+韓文線上小說的 **網頁疊翻閱讀器**（Android）。
+
+像「沉浸式翻譯」一樣：在 App 內建的瀏覽器裡照常打開原網站、用自己的帳號登入閱讀，譯文直接插在每段原文下方。翻譯使用你自己的 AI 服務 API key，不經過任何第三方伺服器。
+
+## 功能
+
+- **站內瀏覽器**：kakaopage、ridi、bomtoon、mrblue 照常登入、閱讀（用你自己的帳號與購買權限）。
+- **譯文注入網頁**：章節頁自動找出正文段落，在每段原文下方插入譯文；一鍵切換「雙語／只看譯文／只看原文」。
+- **捲動自動翻譯**：捲到畫面附近的段落才分批送翻；翻過的段落存進快取，同一話再開直接套用、不再花 API 費用。
+- **插圖文字與跑馬燈**：kakaopage 作者做成圖片的特效文字、聊天畫面可以看圖翻譯；跑馬燈只翻一次，譯文跟著原文一起捲。
+- **每本書一份名詞表**：每話第一次翻譯前自動抽人名、地名等專有名詞；可手動編輯、匯入／匯出 JSON、跨書共用、一鍵取代已翻好的譯名。
+- **翻譯品質**：台灣繁體中文用語、主詞判斷、被動／使役方向、引號保留、避免文言腔等規則，加上簡轉繁保險等後處理。
+- **網站介面翻譯**（選用）：把網站的選單、按鈕等短字串換成中文。
+- **書架**：書＝作品＋名詞表＋閱讀紀錄；點書直接開到上次讀的那一話。可填中文書名與本書翻譯提示詞。
+- **電子紙友善**：譯文以左側直線區隔（不靠顏色），待翻用虛線、失敗用雙線；黑白配色、音量鍵翻頁、可自訂譯文字型。
+
+## 各站支援狀況
+
+| 網站 | 狀態 | 說明 |
+|---|---|---|
+| kakaopage | 支援 | 正文在 shadow DOM 內，自動穿透；翻頁模式會自動改成捲動模式（翻頁模式的總頁數不會把譯文算進去） |
+| ridi | 支援 | 同一作品的各話自動歸成同一本書 |
+| bomtoon | 實驗性 | 一般連載型可用；電子書型版面多變。翻頁排版時建議在網站設定改用捲動 |
+| mrblue | 實驗性 | 連載版可用；單行本若為分頁排版，插入譯文後頁數會變多 |
+
+## 安裝與開始使用
+
+1. 到本專案的 Releases 下載 APK 安裝（需允許「安裝不明來源的應用程式」）。
+2. 打開 App → 右上角「設定」→「管理翻譯服務」→ 選一個範本，填入 API key → 按「抓模型」選模型 → 「測試連線」。
+3. 回首頁，點想看的網站，在站內瀏覽器登入你的帳號。
+4. 打開任一話，譯文會自動出現在原文下方，這本書也會自動加進書架。
+
+### 取得 API key
+
+到你選擇的服務的開發者平台建立 API key（多數需要先儲值或綁定付款方式；各家價格與免費額度請以官方說明為準）：
+
+| 服務 | Base URL（範本已填好） | 備註 |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com/v1` | 預付儲值制 |
+| OpenRouter | `https://openrouter.ai/api/v1` | 一個 key 可用多家模型，預付儲值制 |
+| Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | 支援看圖（插圖文字翻譯） |
+| Groq | `https://api.groq.com/openai/v1` | |
+| OpenAI | `https://api.openai.com/v1` | |
+| Claude 官方 API | `https://api.anthropic.com/v1` | 自動走原生 Messages API（含 prompt caching） |
+
+其他 OpenAI 相容端點（含自架服務）也可以用，Base URL 需包含版本路徑（例如 `/v1`）。
+
+## 常見問題
+
+- **kakaopage 翻到一半跳到最後一頁？** 那是網站的「翻頁模式」：它在載入時就算好總頁數，不會把插入的譯文算進去。App 偵測到時會自動改成捲動模式；想自己控制可到設定關掉「翻頁模式自動改成捲動」。電子紙可開「音量鍵翻頁」，按一下捲一個畫面。
+- **段落顯示「翻譯失敗（網路不穩，稍後自動重試）」？** 手機暫時連不上翻譯服務時，20 秒後會自動重送，最多 3 次；之後可點該段手動重試。
+- **網站介面翻譯的「Google 免費」常失敗？** 那是非官方的免費管道，可能被限流或失效；失敗時若有設定 AI 服務會自動改用 AI 補翻，也可以在設定直接改用 AI。
+- **翻譯費用大概多少？** 依你選的模型與閱讀量而定。開啟「自動抽專有名詞」與「翻譯插圖裡的文字」會多一些請求；已翻過的段落不會重複計費。
+- **在電子紙上譯文太淡或字型怪？** 設定 →「電子紙」把螢幕類型設為電子紙（標線加粗、字重加重）；「譯文字型」可改明體、黑體或匯入自己的字型檔。
+
+## 隱私
+
+本 App 沒有帳號、伺服器、廣告、分析或追蹤。API key、書架、名詞表、譯文快取只存在你的裝置上；譯文快取不存原文。詳見 [PRIVACY.md](PRIVACY.md)。
+
+## 建置
+
+- JDK 17 以上、Android SDK（compileSdk 35）；Kotlin 2.0.21、AGP 8.7.3
+- `./gradlew assembleDebug`：debug 版
+- `./gradlew assembleRelease`：release 版。沒有設定簽章時輸出未簽章的 APK；要簽章請把 `keystore.properties.example` 複製成 `keystore.properties` 並填入金鑰資訊（此檔已在 `.gitignore`，不會進 repo），或改用環境變數 `NEKOYAKU_KEYSTORE`、`NEKOYAKU_KEYSTORE_PASSWORD`、`NEKOYAKU_KEY_ALIAS`、`NEKOYAKU_KEY_PASSWORD`。
+- `./gradlew testDebugUnitTest`：單元測試
+- 注入腳本測試（Chromium 模擬頁，不連真實網站）：
+
+  ```bash
+  cd tools/overlay-test && npm install && npx playwright install chromium && npm test
+  ```
+
+推送到 GitHub 時，GitHub Actions 會自動編譯 debug APK 並跑上述兩種測試。
+
+## 架構
+
+```
+com.nekoyaku.ss
+├─ overlay/
+│  ├─ OverlayController.kt   WebView ↔ App 橋接：快取查詢、名詞預抽、分批翻譯、插圖、介面翻譯、套回網頁
+│  └─ OverlaySettings.kt     顯示模式、自動翻譯、字級、字型、電子紙設定
+├─ site/OverlaySite.kt       各站：章節網址規則、書／話 key、正文位置（給注入腳本）、ridi 系列判斷
+├─ ai/                       TranslationService（提示詞＋後處理）、AnthropicBridge、AiProfileStore
+├─ data/db/                  Room：translation（段落快取）、glossary、book、chapter_book
+└─ ui/                       home（網站＋書架）／browser／glossary／settings（含關於）
+assets/overlay.js            注入腳本：找段落、捲動觸發、重繪補回、插圖、跑馬燈、字色、介面翻譯
+tools/overlay-test/          注入腳本的 Chromium 模擬頁測試
+tools/glossary-converter.html  試算表韓中對照 → 名詞表 JSON 的轉換工具（瀏覽器直接開）
+```
+
+## 授權
+
+本程式是自由軟體，依 [GNU General Public License 第 3 版](LICENSE)（GPL-3.0）授權：你可以自由使用、研究、修改與散布；散布修改後的版本時，也必須以 GPL-3.0 公開原始碼。本程式不提供任何擔保。
+
+閱讀內容的著作權屬於原網站與作者。本 App 只在你自己的裝置上、以你自己的帳號閱讀時提供翻譯輔助，請勿散布譯文。
