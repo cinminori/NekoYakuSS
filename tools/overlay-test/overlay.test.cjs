@@ -142,6 +142,28 @@ async function testFontFollow(browser) {
   await page.close();
 }
 
+async function testHugeChapter(browser) {
+  console.log('超長章節（電子書型）：翻譯整頁不超過 App 單次上限');
+  const body = `<!doctype html><html><body><div id="viewer">` +
+    Array.from({ length: 1000 }, (_, i) => `<p id="text_${i}">${KO(i)}</p>`).join('') + `</div></body></html>`;
+  const page = await openPage(browser, 'https://www.bomtoon.com/viewer/book/2', body, ECHO_BRIDGE);
+  await page.evaluate(() => {
+    // 跟 App 一樣：單次超過 400 段就丟棄
+    const orig = window.NekoYaku.request;
+    window.__dropped = 0;
+    window.NekoYaku.request = (s) => { if (JSON.parse(s).items.length > 400) { window.__dropped++; return; } orig(s); };
+  });
+  await inject(page, { roots: ['#viewer'], paras: 'p[id^="text_"]', minParas: 3, pathRe: '^/viewer/([^/]+)/([^/]+)/?$', auto: false });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => __ny.translateAll());
+  await page.waitForTimeout(1200);
+  const r = await page.evaluate(() => ({ stats: JSON.parse(__ny.stats()), dropped: __dropped, reqs: __reqs.length, max: Math.max(0, ...__reqs.map((q) => q.items.length)), ctx: (__reqs[1] || {}).ctx }));
+  check('沒有請求被 App 丟棄', r.dropped === 0, r);
+  check('全部段落都翻完', r.stats.done === 1000 && r.stats.pending === 0, r.stats);
+  check('分批帶前文脈絡', r.reqs > 1 && r.ctx && r.ctx.length === 2, r);
+  await page.close();
+}
+
 async function testRidi(browser) {
   console.log('ridi：#viewer_contents、聊天泡泡、表格');
   const paras = Array.from({ length: 40 }, (_, i) => '<p>' + KO(i) + '</p>').join('');
@@ -302,6 +324,7 @@ async function testAutoRetry(browser) {
     await testKakaoShadow(browser);
     await testRidi(browser);
     await testFontFollow(browser);
+    await testHugeChapter(browser);
     await testImagesAndColor(browser);
     await testMarquee(browser);
     await testPagedForceScroll(browser);

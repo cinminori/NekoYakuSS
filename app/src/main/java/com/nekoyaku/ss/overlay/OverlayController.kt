@@ -173,6 +173,10 @@ class OverlayController(
     fun setStyle(scale: Float, eink: Boolean) = js("window.__ny&&__ny.setStyle({scale:$scale,eink:$eink})")
     fun translateAll() = js("window.__ny&&__ny.translateAll()")
 
+    /** 本話還沒翻、也沒在翻的段落數。 */
+    suspend fun untranslatedCount(): Int =
+        evalJs("window.__ny?(function(s){return s.total-s.done-s.pending})(JSON.parse(__ny.stats())):0")?.toIntOrNull() ?: 0
+
     /** 網站介面翻譯開關（關掉會把網頁上的字還原）。 */
     fun setUi(on: Boolean) {
         if (on) inject()

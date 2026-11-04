@@ -85,6 +85,7 @@ fun BrowserScreen(
     var pageTitle by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var confirmTranslateAll by remember { mutableStateOf<Int?>(null) }
     var showBookNote by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
 
@@ -157,7 +158,10 @@ fun BrowserScreen(
                             if (reading) {
                                 DropdownMenuItem(text = { Text("翻譯整頁") }, onClick = {
                                     menuOpen = false
-                                    controller.translateAll()
+                                    scope.launch {
+                                        val n = controller.untranslatedCount()
+                                        if (n > CONFIRM_TRANSLATE_ALL_PARAS) confirmTranslateAll = n else controller.translateAll()
+                                    }
                                 })
                                 DropdownMenuItem(text = { Text("名詞表") }, onClick = {
                                     menuOpen = false
@@ -291,7 +295,24 @@ fun BrowserScreen(
     if (showBookNote) {
         BookNoteDialog(controller = controller, onDismiss = { showBookNote = false })
     }
+    confirmTranslateAll?.let { n ->
+        AlertDialog(
+            onDismissRequest = { confirmTranslateAll = null },
+            title = { Text("翻譯整話？") },
+            text = { Text("這一話還有 $n 段沒翻，全部翻完會送出很多次請求，API 費用也會比較高。\n\n只想往下讀的話，打開「自動」就好，捲到哪翻到哪。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmTranslateAll = null
+                    controller.translateAll()
+                }) { Text("全部翻譯") }
+            },
+            dismissButton = { TextButton(onClick = { confirmTranslateAll = null }) { Text("取消") } },
+        )
+    }
 }
+
+/** 「翻譯整頁」超過這個段數先問一聲（一般連載一話約一兩百段，電子書型可達數千段）。 */
+private const val CONFIRM_TRANSLATE_ALL_PARAS = 500
 
 private fun statusLine(s: com.nekoyaku.ss.overlay.OverlayStatus, support: SupportLevel?, reading: Boolean): String = when {
     support == null -> "非支援網站：只能瀏覽"

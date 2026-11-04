@@ -31,6 +31,7 @@
   var trByText = {};      // 原文 -> 譯文（本頁記憶體快取）
   var trByImg = {};       // 圖片網址 -> 圖中文字譯文（空字串＝圖中沒有文字）
   var queue = [];
+  var MAX_REQUEST_ITEMS = 200;
   var flushTimer = 0;
   var scanTimer = 0;
   var lastHref = '';
@@ -595,8 +596,11 @@
     flushTimer = 0;
     var batch = queue.filter(function (r) { return r.st === 'queued' && r.el.isConnected; });
     queue = [];
-    if (!batch.length) return;
     batch.sort(function (a, b) { return a.id - b.id; });
+    // 電子書型一話可達數千段；App 單次請求有上限（MAX_ITEMS_PER_REQUEST），超過會被丟棄
+    for (var i = 0; i < batch.length; i += MAX_REQUEST_ITEMS) sendBatch(batch.slice(i, i + MAX_REQUEST_ITEMS));
+  }
+  function sendBatch(batch) {
     var items = [], seen = {};
     batch.forEach(function (r) {
       r.st = 'pending';
