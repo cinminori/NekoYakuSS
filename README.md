@@ -63,36 +63,6 @@
 
 本 App 沒有帳號、伺服器、廣告、分析或追蹤。API key、書架、名詞表、譯文快取只存在你的裝置上；譯文快取不存原文。詳見 [PRIVACY.md](PRIVACY.md)。
 
-## 建置
-
-- JDK 17 以上、Android SDK（compileSdk 35）；Kotlin 2.0.21、AGP 8.7.3
-- `./gradlew assembleDebug`：debug 版
-- `./gradlew assembleRelease`：release 版。沒有設定簽章時輸出未簽章的 APK；要簽章請把 `keystore.properties.example` 複製成 `keystore.properties` 並填入金鑰資訊（此檔已在 `.gitignore`，不會進 repo），或改用環境變數 `NEKOYAKU_KEYSTORE`、`NEKOYAKU_KEYSTORE_PASSWORD`、`NEKOYAKU_KEY_ALIAS`、`NEKOYAKU_KEY_PASSWORD`。
-- `./gradlew testDebugUnitTest`：單元測試
-- 注入腳本測試（Chromium 模擬頁，不連真實網站）：
-
-  ```bash
-  cd tools/overlay-test && npm install && npx playwright install chromium && npm test
-  ```
-
-推送到 GitHub 時，GitHub Actions 會自動編譯 debug APK 並跑上述兩種測試。
-
-## 架構
-
-```
-com.nekoyaku.ss
-├─ overlay/
-│  ├─ OverlayController.kt   WebView ↔ App 橋接：快取查詢、名詞預抽、分批翻譯、插圖、介面翻譯、套回網頁
-│  └─ OverlaySettings.kt     顯示模式、自動翻譯、字級、字型、電子紙設定
-├─ site/OverlaySite.kt       各站：章節網址規則、書／話 key、正文位置（給注入腳本）、ridi 系列判斷
-├─ ai/                       TranslationService（提示詞＋後處理）、AnthropicBridge、AiProfileStore
-├─ data/db/                  Room：translation（段落快取）、glossary、book、chapter_book
-└─ ui/                       home（網站＋書架）／browser／glossary／settings（含關於）
-assets/overlay.js            注入腳本：找段落、捲動觸發、重繪補回、插圖、跑馬燈、字色、介面翻譯
-tools/overlay-test/          注入腳本的 Chromium 模擬頁測試
-tools/glossary-converter.html  試算表韓中對照 → 名詞表 JSON 的轉換工具（瀏覽器直接開）
-```
-
 ## 授權
 
 本程式是自由軟體，依 [GNU General Public License 第 3 版](LICENSE)（GPL-3.0）授權：你可以自由使用、研究、修改與散布；散布修改後的版本時，也必須以 GPL-3.0 公開原始碼。本程式不提供任何擔保。
