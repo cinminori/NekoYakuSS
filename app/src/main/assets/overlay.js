@@ -852,6 +852,12 @@
     });
   }
   /** 音量鍵翻頁：找出正文所在的捲動容器，捲一個畫面（不用平滑捲動，e-ink 少殘影）。 */
+  /** html／body 的 overflow 會傳給視窗（html 沒設 overflow 時 body 的才會傳）：這時對它們捲動沒有作用，要捲視窗。 */
+  function scrollsViewport(n) {
+    var html = n.ownerDocument.documentElement;
+    if (n === html) return true;
+    return n === n.ownerDocument.body && winOf(n).getComputedStyle(html).overflowY === 'visible';
+  }
   function page(dir) {
     var el = null;
     Object.keys(recs).some(function (id) { var r = recs[id]; if (r.el.isConnected) { el = r.el; return true; } return false; });
@@ -859,7 +865,7 @@
     for (var n = el; n; ) {
       if (n.nodeType === 1) {
         var w = winOf(n), cs = w.getComputedStyle(n);
-        if (n.scrollHeight > n.clientHeight + 20 && /(auto|scroll)/.test(cs.overflowY)) { target = n; break; }
+        if (n.scrollHeight > n.clientHeight + 20 && /(auto|scroll)/.test(cs.overflowY) && !scrollsViewport(n)) { target = n; break; }
       }
       if (n.parentNode && n.parentNode.nodeType === 11) n = n.parentNode.host; else n = n.parentNode;
       if (n && n.nodeType === 9) { n = null; }

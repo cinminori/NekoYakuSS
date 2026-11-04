@@ -164,6 +164,29 @@ async function testHugeChapter(browser) {
   await page.close();
 }
 
+async function testVolumePaging(browser) {
+  console.log('音量鍵翻頁：捲到真正會動的容器');
+  const paras = Array.from({ length: 60 }, (_, i) => `<p id="text_${i}" style="font-size:18px">${KO(i)}</p>`).join('');
+  const cfg = { roots: ['#viewer'], paras: 'p[id^="text_"]', minParas: 3, pathRe: '^/viewer/([^/]+)/([^/]+)/?$', auto: false };
+  const run = async (name, head, read) => {
+    const page = await openPage(browser, 'https://www.bomtoon.com/viewer/book/3', `<!doctype html><html><head><style>${head}</style></head><body><div id="viewer">${paras}</div></body></html>`, ECHO_BRIDGE);
+    await inject(page, cfg);
+    await page.waitForTimeout(500);
+    await page.evaluate(() => __ny.page(1));
+    await page.waitForTimeout(100);
+    const down = await page.evaluate(read);
+    await page.evaluate(() => __ny.page(-1));
+    await page.waitForTimeout(100);
+    const up = await page.evaluate(read);
+    check(name + '：下一頁往下捲', down > 300, down);
+    check(name + '：上一頁捲回去', up < down, { down, up });
+    await page.close();
+  };
+  await run('body 有 overflow:auto、實際捲視窗（kakaopage）', 'html,body{height:100%}body{overflow-y:auto}', () => window.scrollY);
+  await run('html 也有 overflow、body 才是捲動容器', 'html,body{height:100%;overflow:hidden}body{overflow-y:auto}', () => document.body.scrollTop);
+  await run('內層容器捲動（bomtoon 電子書型）', 'html,body{height:100%;margin:0;overflow:hidden}#viewer{height:100%;overflow-y:auto}', () => document.getElementById('viewer').scrollTop);
+}
+
 async function testRidi(browser) {
   console.log('ridi：#viewer_contents、聊天泡泡、表格');
   const paras = Array.from({ length: 40 }, (_, i) => '<p>' + KO(i) + '</p>').join('');
@@ -325,6 +348,7 @@ async function testAutoRetry(browser) {
     await testRidi(browser);
     await testFontFollow(browser);
     await testHugeChapter(browser);
+    await testVolumePaging(browser);
     await testImagesAndColor(browser);
     await testMarquee(browser);
     await testPagedForceScroll(browser);
