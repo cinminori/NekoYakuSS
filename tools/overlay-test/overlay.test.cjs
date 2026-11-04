@@ -105,6 +105,43 @@ async function testKakaoShadow(browser) {
   await page.close();
 }
 
+async function testFontFollow(browser) {
+  console.log('網頁閱讀器調整字級：譯文跟著變');
+  const body = `<!doctype html><html><head><style>
+    .fs-m p { font-size: 18px; } .fs-l p { font-size: 24px; } .fs-s p { font-size: 14px; }
+    </style></head><body><div id="viewer" class="fs-m">` +
+    Array.from({ length: 12 }, (_, i) => `<p id="text_${i}">${KO(i)}</p>`).join('') + `</div></body></html>`;
+  const page = await openPage(browser, 'https://www.bomtoon.com/viewer/book/1', body, ECHO_BRIDGE);
+  await inject(page, { roots: ['#viewer'], paras: 'p[id^="text_"]', minParas: 3, pathRe: '^/viewer/([^/]+)/([^/]+)/?$', auto: true });
+  await page.waitForTimeout(1200);
+  const size = () => page.evaluate(() => ({
+    tr: getComputedStyle(document.querySelector('#text_0 ny-tr')).fontSize,
+    src: getComputedStyle(document.getElementById('text_0')).fontSize,
+    mark: document.getElementById('text_0').getAttribute('data-ny-src'),
+    reqs: __reqs.length,
+  }));
+  const s0 = await size();
+  check('一開始譯文跟原文同字級', s0.tr === '18px', s0);
+  await page.evaluate(() => { document.getElementById('viewer').className = 'fs-l'; });
+  await page.waitForTimeout(1000);
+  const s1 = await size();
+  check('雙語：外層 class 改字級，譯文跟著變大', s1.tr === '24px', s1);
+  check('字級變動不重送翻譯', s1.reqs === s0.reqs, s1);
+  await page.evaluate(() => { __ny.setMode('tr'); document.getElementById('viewer').className = 'fs-s'; });
+  await page.waitForTimeout(1000);
+  const s2 = await size();
+  check('只看譯文：改字級，譯文跟著變小', s2.tr === '14px', s2);
+  check('只看譯文：原文仍隱藏', s2.src === '0px' && s2.mark === '1', s2);
+  await page.evaluate(() => {
+    __ny.setMode('dual');
+    document.querySelectorAll('#viewer p').forEach((p) => { p.style.fontSize = '30px'; });
+  });
+  await page.waitForTimeout(1000);
+  const s3 = await size();
+  check('段落 inline style 改字級也跟得上', s3.tr === '30px', s3);
+  await page.close();
+}
+
 async function testRidi(browser) {
   console.log('ridi：#viewer_contents、聊天泡泡、表格');
   const paras = Array.from({ length: 40 }, (_, i) => '<p>' + KO(i) + '</p>').join('');
@@ -264,6 +301,7 @@ async function testAutoRetry(browser) {
   try {
     await testKakaoShadow(browser);
     await testRidi(browser);
+    await testFontFollow(browser);
     await testImagesAndColor(browser);
     await testMarquee(browser);
     await testPagedForceScroll(browser);

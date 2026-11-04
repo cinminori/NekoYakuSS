@@ -621,6 +621,29 @@
     r.node.style.setProperty('font-size', (r.fs * cfg.scale).toFixed(1) + 'px', 'important');
     colorNode(r);
   }
+  /** 原文現在的字級。「只看譯文」的 CSS 把原文壓成 0，要暫時拿掉標記才量得到（同步量完放回，不會畫出來）。 */
+  function srcFontSize(r) {
+    var el = r.kind === 'img' ? r.el.parentElement || r.el : r.el;
+    var marked = el.hasAttribute('data-ny-src');
+    if (marked) el.removeAttribute('data-ny-src');
+    var fs = 0;
+    try { fs = parseFloat(winOf(el).getComputedStyle(el).fontSize) || 0; } catch (e) {}
+    if (marked) el.setAttribute('data-ny-src', '1');
+    return fs;
+  }
+  /** 網頁閱讀器調字級（class、inline style 都有）：抽前幾段看有沒有變，變了才全部重量。 */
+  function syncFontSizes() {
+    var ids = Object.keys(recs);
+    var changed = ids.slice(0, 5).some(function (id) {
+      var fs = srcFontSize(recs[id]);
+      return fs > 0 && Math.abs(fs - recs[id].fs) > 0.1;
+    });
+    if (!changed) return;
+    ids.forEach(function (id) {
+      var r = recs[id], fs = srcFontSize(r);
+      if (fs > 0 && fs !== r.fs) { r.fs = fs; if (r.node) sizeNode(r); }
+    });
+  }
 
   // ── 譯文字色：跟背景對比不夠時換色 ──
   // kakaopage 的黑底電子看板（box1b）：段落本身是深色字，綠字是內層 span 自己的顏色；
@@ -890,6 +913,7 @@
   // 正文還沒出現前密集一點找（SPA／shadow root 晚掛上不會觸發 MutationObserver），找到後放慢
   setInterval(function () {
     autoRetry();
+    syncFontSizes();
     var gap = Date.now() - lastScanAt;
     if ((Object.keys(recs).length === 0 && onChapter()) || gap > (onChapter() ? 2000 : 1500)) scheduleScan(10);
   }, 700);
