@@ -588,6 +588,7 @@ class OverlayController(
 
     private suspend fun onPage(info: PageInfo) {
         val ch = runCatching { chapterOf(info.url) }.getOrNull() ?: return
+        applyCached(ch, info.sid)
         // 站方 API 給的書名優先（kakaopage 網頁標題是「추천 | 카카오페이지」，不是書名）
         val official = ch.site.fetchTitles(info.url, CookieManager.getInstance().getCookie(info.url))
         val (bookTitle, chapterTitle) = official ?: ch.site.titlesOf(info.title, info.og)
@@ -613,6 +614,14 @@ class OverlayController(
                 if (info.url == topUrl) _status.update { it.copy(title = zh) }
             }
         }
+    }
+
+    /** 翻過的段落開頁就套上：只讀本機快取、不花 API 費用，所以不看「自動」開關。 */
+    private suspend fun applyCached(ch: Chapter, sid: String) {
+        val hits = app.cacheRepository.lookup(ch.site.id, ch.bookKey, ch.chapterKey, collectPage())
+        if (hits.isEmpty()) return
+        applyToPage(listOf(sid), hits)
+        _status.update { it.copy(fromCache = it.fromCache + hits.size) }
     }
 
     private suspend fun handle(req: Req) {
