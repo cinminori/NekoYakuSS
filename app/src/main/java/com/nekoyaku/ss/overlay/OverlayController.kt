@@ -55,6 +55,18 @@ data class OverlayStatus(
     val title: String = "",
 )
 
+/** 長按譯文開啟的編輯對象：這一話第 [occurrence] 次出現的 [text]。 */
+data class TrEdit(
+    val sid: String,
+    val url: String,
+    val text: String,
+    val occurrence: Int,
+    val translation: String,
+    val context: List<String>,
+    /** 這一處已經單獨改過（不是用共用譯文）。 */
+    val overridden: Boolean,
+)
+
 /**
  * 一個站內瀏覽器（WebView）的疊翻控制器。
  *
@@ -84,6 +96,9 @@ class OverlayController(
 
     private val _status = MutableStateFlow(OverlayStatus())
     val status: StateFlow<OverlayStatus> = _status.asStateFlow()
+
+    private val _trEdit = MutableStateFlow<TrEdit?>(null)
+    val trEdit = _trEdit.asStateFlow()
 
     /** 同一段正在翻的（cacheKey → 等著套用的 sid），避免同段重複送。 */
     private val inFlight = HashMap<String, MutableSet<String>>()
@@ -298,6 +313,12 @@ class OverlayController(
     private data class PageInfo(val sid: String = "", val url: String = "", val title: String = "", val og: String = "", val count: Int = 0)
 
     @Serializable
+    private data class TrMenu(val sid: String = "", val url: String = "", val t: String = "", val occ: Int = 0, val tr: String = "", val ctx: List<String> = emptyList())
+
+    @Serializable
+    private data class OvItem(val t: String, val occ: Int, val tr: String? = null)
+
+    @Serializable
     private data class ReqItem(val i: Int, val t: String)
 
     @Serializable
@@ -313,6 +334,18 @@ class OverlayController(
             val info = runCatching { json.decodeFromString<PageInfo>(payload) }.getOrNull() ?: return
             if (!accept(info.sid, info.url)) return
             scope.launch { onPage(info) }
+        }
+
+        /** 長按譯文。 */
+        @JavascriptInterface
+        fun trMenu(payload: String) {
+            val m = runCatching { json.decodeFromString<TrMenu>(payload) }.getOrNull() ?: return
+            if (!accept(m.sid, m.url)) return
+            scope.launch {
+                val ch = chapterOf(m.url) ?: return@launch
+                val key = app.cacheRepository.overrideKey(ch.site.id, ch.bookKey, ch.chapterKey, m.t, m.occ)
+                _trEdit.value = TrEdit(m.sid, m.url, m.t, m.occ, m.tr, m.ctx, app.cacheRepository.getRaw(key) != null)
+            }
         }
 
         /** 腳本要翻的段落（已去重、照網頁順序）。 */
@@ -618,16 +651,58 @@ class OverlayController(
 
     /** 翻過的段落開頁就套上：只讀本機快取、不花 API 費用，所以不看「自動」開關。 */
     private suspend fun applyCached(ch: Chapter, sid: String) {
-        val hits = app.cacheRepository.lookup(ch.site.id, ch.bookKey, ch.chapterKey, collectPage())
+        val texts = collectPage()
+        applyOverrides(ch, sid, texts)
+        val hits = app.cacheRepository.lookup(ch.site.id, ch.bookKey, ch.chapterKey, texts)
         if (hits.isEmpty()) return
         applyToPage(listOf(sid), hits)
         _status.update { it.copy(fromCache = it.fromCache + hits.size) }
+    }
+
+    private suspend fun applyOverrides(ch: Chapter, sid: String, texts: Collection<String>) {
+        val items = app.cacheRepository.overrides(ch.site.id, ch.bookKey, ch.chapterKey, texts)
+            .map { (t, occ, tr) -> OvItem(t, occ, tr) }
+        if (items.isNotEmpty()) sendOverrides(sid, items)
+    }
+
+    private fun sendOverrides(sid: String, items: List<OvItem>) =
+        js("window.__ny&&__ny.applyOv('${jsStr(sid)}',${safeJs(json.encodeToString(items))})")
+
+    /** 單段重翻：回傳新譯文給對話框，使用者按儲存才寫入。 */
+    suspend fun retranslateOne(e: TrEdit): String {
+        val profile = app.aiProfileStore.selected ?: error("尚未設定 AI 翻譯服務")
+        val ch = chapterOf(e.url) ?: error("這一頁不是可疊翻的章節頁")
+        val glossary = app.glossaryRepository.confirmedList(ch.bookId)
+            .map { GlossaryTerm(it.term, it.translation, it.type, it.note) }
+        val book = app.cacheRepository.getBook(ch.site.id, ch.bookKey)
+        return app.translationService.translateOne(e.text, profile, glossary, book?.promptNote, e.context)
+    }
+
+    suspend fun saveOverride(e: TrEdit, translation: String) {
+        val ch = chapterOf(e.url) ?: return
+        app.cacheRepository.putRaw(app.cacheRepository.overrideKey(ch.site.id, ch.bookKey, ch.chapterKey, e.text, e.occurrence), translation)
+        sendOverrides(e.sid, listOf(OvItem(e.text, e.occurrence, translation)))
+    }
+
+    suspend fun clearOverride(e: TrEdit) {
+        val ch = chapterOf(e.url) ?: return
+        app.cacheRepository.deleteRaw(app.cacheRepository.overrideKey(ch.site.id, ch.bookKey, ch.chapterKey, e.text, e.occurrence))
+        sendOverrides(e.sid, listOf(OvItem(e.text, e.occurrence)))
+    }
+
+    fun dismissTrEdit() { _trEdit.value = null }
+
+    /** 這一話有幾處單獨改過的譯文。 */
+    suspend fun overrideCount(): Int {
+        val ch = chapterOf(topUrl) ?: return 0
+        return app.cacheRepository.countOverrides(ch.site.id, ch.bookKey, ch.chapterKey)
     }
 
     private suspend fun handle(req: Req) {
         val ch = chapterOf(req.url) ?: return
         val cache = app.cacheRepository
         val texts = req.items.map { it.t }.distinct()
+        applyOverrides(ch, req.sid, texts)
         val hits = cache.lookup(ch.site.id, ch.bookKey, ch.chapterKey, texts)
         if (hits.isNotEmpty()) {
             applyToPage(listOf(req.sid), hits)

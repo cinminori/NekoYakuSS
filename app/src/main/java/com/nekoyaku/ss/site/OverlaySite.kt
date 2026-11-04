@@ -157,7 +157,7 @@ object RidiSite : OverlaySite {
     override val displayName = "리디（ridi）"
     override val homeUrl = "https://ridibooks.com/"
     override val support = SupportLevel.SUPPORTED
-    override val supportNote = "每話第一次開啟會查一次作品頁，確認屬於哪個系列。"
+    override val supportNote = "僅限線上連載版；電子書版限 RIDI App 閱讀。"
     override val hosts = listOf("ridibooks.com")
 
     override val chapterPathRegex = """^/books/(\d+)/view/?$"""

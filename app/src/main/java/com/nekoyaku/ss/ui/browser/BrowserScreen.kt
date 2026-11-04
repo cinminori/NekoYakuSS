@@ -15,9 +15,13 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,20 +42,23 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.DialogProperties
 import com.nekoyaku.ss.BuildConfig
 import com.nekoyaku.ss.NekoYakuApp
 import com.nekoyaku.ss.overlay.OverlayController
+import com.nekoyaku.ss.overlay.TrEdit
 import com.nekoyaku.ss.site.SiteRegistry
 import com.nekoyaku.ss.site.SupportLevel
 import com.nekoyaku.ss.ui.components.Hairline
@@ -86,6 +93,7 @@ fun BrowserScreen(
     var webView by remember { mutableStateOf<WebView?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmTranslateAll by remember { mutableStateOf<Int?>(null) }
+    var confirmRetranslate by remember { mutableStateOf<Int?>(null) }
     var showBookNote by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
 
@@ -180,7 +188,10 @@ fun BrowserScreen(
                                 })
                                 DropdownMenuItem(text = { Text("重新翻譯本話") }, onClick = {
                                     menuOpen = false
-                                    scope.launch { toast(controller.retranslateChapter()) }
+                                    scope.launch {
+                                        val n = controller.overrideCount()
+                                        if (n > 0) confirmRetranslate = n else toast(controller.retranslateChapter())
+                                    }
                                 })
                             }
                             if (site != null) {
@@ -295,6 +306,24 @@ fun BrowserScreen(
     if (showBookNote) {
         BookNoteDialog(controller = controller, onDismiss = { showBookNote = false })
     }
+    confirmRetranslate?.let { n ->
+        AlertDialog(
+            onDismissRequest = { confirmRetranslate = null },
+            title = { Text("重新翻譯本話？") },
+            text = { Text("這一話有 $n 處你單獨改過的譯文，重新翻譯會一併清掉。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRetranslate = null
+                    scope.launch { toast(controller.retranslateChapter()) }
+                }) { Text("清掉並重翻") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRetranslate = null }) { Text("取消") } },
+        )
+    }
+    val trEdit by controller.trEdit.collectAsState()
+    trEdit?.let { e ->
+        key(e) { TrEditDialog(controller = controller, edit = e, onDismiss = controller::dismissTrEdit) }
+    }
     confirmTranslateAll?.let { n ->
         AlertDialog(
             onDismissRequest = { confirmTranslateAll = null },
@@ -349,6 +378,70 @@ private fun openExternal(c: android.content.Context, uri: Uri, view: WebView?): 
         DebugLog.w("browse", "無法開啟外部連結：${uri.scheme}")
         true
     }
+}
+
+/** 長按譯文：只改這一處的譯文，手動修改或重翻。 */
+@Composable
+private fun TrEditDialog(controller: OverlayController, edit: TrEdit, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf(edit.translation) }
+    var translating by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // 有未儲存的修改，點外面不關閉
+        properties = DialogProperties(dismissOnClickOutside = false),
+        title = { Text("修改這一處譯文") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("原文", style = MaterialTheme.typography.labelMedium)
+                Text(edit.text, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; error = null },
+                    label = { Text("譯文") },
+                    enabled = !translating,
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                Text(
+                    "只改這一處，其他相同的句子不受影響。",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                TextButton(enabled = !translating, onClick = {
+                    translating = true
+                    error = null
+                    scope.launch {
+                        runCatching { controller.retranslateOne(edit) }
+                            .onSuccess { text = it }
+                            .onFailure { error = "重翻失敗：${it.message?.take(80)}" }
+                        translating = false
+                    }
+                }) { Text(if (translating) "重翻中⋯" else "重翻這段（送一次請求）") }
+                if (edit.overridden) {
+                    TextButton(enabled = !translating, onClick = {
+                        scope.launch {
+                            controller.clearOverride(edit)
+                            onDismiss()
+                        }
+                    }) { Text("恢復共用譯文") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !translating && text.isNotBlank(), onClick = {
+                scope.launch {
+                    controller.saveOverride(edit, text.trim())
+                    onDismiss()
+                }
+            }) { Text("儲存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 /** 本書翻譯提示詞（題材背景、用語領域），每次翻譯都會帶給模型。 */

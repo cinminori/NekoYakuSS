@@ -18,6 +18,12 @@ interface NekoDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putTranslations(items: List<TranslationEntity>)
 
+    @Query("SELECT * FROM translation WHERE `key` LIKE :prefix || '%'")
+    suspend fun getTranslationsByPrefix(prefix: String): List<TranslationEntity>
+
+    @Query("DELETE FROM translation WHERE `key` = :key")
+    suspend fun deleteTranslation(key: String)
+
     @Query("DELETE FROM translation WHERE `key` LIKE :prefix || '%'")
     suspend fun deleteTranslationsByPrefix(prefix: String)
 

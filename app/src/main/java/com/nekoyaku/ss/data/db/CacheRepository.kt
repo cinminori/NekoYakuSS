@@ -45,6 +45,35 @@ class CacheRepository(private val dao: NekoDao) {
     fun imageKey(siteId: String, bookKey: String, chapterKey: String, imageId: String): String =
         prefix(siteId, bookKey, chapterKey) + "img@" + imageId.hashCode() + "." + imageId.length
 
+    /**
+     * 單處覆寫的快取 key：這一話第 [occurrence] 次出現的 [original]（長按譯文手動改或重翻）。
+     * 放在同一張 translation 表，「重新翻譯本話」、譯文取代、書籍合併都會一併處理；`ov@` 不會跟段落 hash 撞到。
+     */
+    fun overrideKey(siteId: String, bookKey: String, chapterKey: String, original: String, occurrence: Int): String =
+        overridePrefix(siteId, bookKey, chapterKey) + original.hashCode() + "#" + occurrence
+
+    private fun overridePrefix(siteId: String, bookKey: String, chapterKey: String) =
+        prefix(siteId, bookKey, chapterKey) + "ov@"
+
+    /** 查 [originals] 這些原文的單處覆寫：回傳（原文, 第幾次出現, 譯文）。 */
+    suspend fun overrides(siteId: String, bookKey: String, chapterKey: String, originals: Collection<String>): List<Triple<String, Int, String>> =
+        withContext(Dispatchers.IO) {
+            val head = overridePrefix(siteId, bookKey, chapterKey)
+            val rows = dao.getTranslationsByPrefix(head)
+            if (rows.isEmpty()) return@withContext emptyList()
+            val byHash = originals.associateBy { it.hashCode() }
+            rows.mapNotNull { e ->
+                val (hash, occ) = e.key.removePrefix(head).split('#').takeIf { it.size == 2 } ?: return@mapNotNull null
+                val original = hash.toIntOrNull()?.let(byHash::get) ?: return@mapNotNull null
+                Triple(original, occ.toIntOrNull() ?: return@mapNotNull null, e.text)
+            }
+        }
+
+    suspend fun countOverrides(siteId: String, bookKey: String, chapterKey: String): Int =
+        withContext(Dispatchers.IO) { dao.getTranslationsByPrefix(overridePrefix(siteId, bookKey, chapterKey)).size }
+
+    suspend fun deleteRaw(key: String) = withContext(Dispatchers.IO) { dao.deleteTranslation(key) }
+
     suspend fun getRaw(key: String): String? =
         withContext(Dispatchers.IO) { dao.getTranslations(listOf(key)).firstOrNull()?.text }
 

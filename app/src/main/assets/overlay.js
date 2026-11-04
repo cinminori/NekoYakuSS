@@ -32,6 +32,9 @@
   var trByImg = {};       // 圖片網址 -> 圖中文字譯文（空字串＝圖中沒有文字）
   var queue = [];
   var MAX_REQUEST_ITEMS = 200;
+  var ovTr = {};          // 單處覆寫：原文＋第幾次出現 -> 譯文
+  var ovTexts = {};       // 有覆寫的原文 -> 筆數
+  var LONG_PRESS_MS = 600;
   var flushTimer = 0;
   var scanTimer = 0;
   var lastHref = '';
@@ -85,7 +88,8 @@
       'animation:ny-marquee var(--ny-mq-dur,20s) linear infinite!important;}' +
       '@keyframes ny-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}' +
       '@media (prefers-reduced-motion: reduce){' + TAG + '.ny-mq .ny-mq-in{animation:none!important;}}' +
-      TAG + '.ny-fail{border-left-style:double!important;border-left-width:.3em!important;}';
+      TAG + '.ny-fail{border-left-style:double!important;border-left-width:.3em!important;}' +
+      TAG + '{-webkit-user-select:none!important;user-select:none!important;}'; // 長按留給選單
     if (cfg.eink) s += TAG + '{font-weight:500!important;}';
     // 譯文字型：網頁的韓文字型配中文常常很怪；generic 字族交給系統依 lang（繁中）挑字形
     var fam = { sans: 'sans-serif', serif: 'serif', custom: '"NekoYakuTr", sans-serif' }[cfg.font];
@@ -246,6 +250,8 @@
     lastScanAt = Date.now();
     if (location.href !== lastHref) {
       lastHref = location.href;
+      ovTr = {};
+      ovTexts = {};
       reportedHref = '';
       shadowHosts = [];
       lastHostSearch = 0;
@@ -337,7 +343,7 @@
     el.__nyId = id;
     try { el.setAttribute('data-ny-src', '1'); } catch (e) {}
     ensureStyle(el.getRootNode ? el.getRootNode() : document);
-    if (trByText[t] !== undefined) { r.st = 'done'; paint(r); return; }
+    if (trOf(r) !== undefined) { r.st = 'done'; paint(r); return; }
     observe(r);
   }
 
@@ -587,7 +593,7 @@
   }
   function enqueue(r) {
     if (r.st !== 'new' && r.st !== 'fail') return;
-    if (trByText[r.t] !== undefined) { r.st = 'done'; paint(r); return; }
+    if (trOf(r) !== undefined) { r.st = 'done'; paint(r); return; }
     r.st = 'queued';
     queue.push(r);
     if (!flushTimer) flushTimer = setTimeout(flush, 350);
@@ -711,7 +717,7 @@
   }
   function paint(r, msg) {
     var img = r.kind === 'img';
-    var tr = img ? trByImg[r.src] : trByText[r.t];
+    var tr = img ? trByImg[r.src] : trOf(r);
     var drop = r.st === 'new' || r.st === 'queued' || (img && r.st === 'done' && !tr);
     if (drop) { if (r.node && r.node.parentNode) r.node.parentNode.removeChild(r.node); r.node = null; return; }
     if (!placed(r)) {
@@ -721,6 +727,7 @@
       // 網頁標成韓文時，中文字會被套上韓式字形；標成繁中讓系統挑對字形
       r.node.setAttribute('lang', 'zh-Hant-TW');
       r.node.addEventListener('click', onTrClick, true);
+      if (!img) watchLongPress(r.node);
       // 圖片不能有子元素、跑馬燈外框會捲動：譯文放在它們正下方
       var after = afterOf(r);
       if (after) { if (!after.parentNode) return; after.parentNode.insertBefore(r.node, after.nextSibling); }
@@ -753,6 +760,68 @@
     span.style.setProperty('--ny-mq-dur', Math.max(8, Math.round((tr.length + 3) * copies / 2 * 0.35)) + 's');
     r.node.textContent = '';
     r.node.appendChild(span);
+  }
+  // ── 單處覆寫：同一話裡一字不差的句子共用譯文，長按可以只改其中一處 ──
+  function ovKey(t, occ) { return occ + '#' + t; }
+  /** 這一段是這一話裡第幾次出現這句原文（照網頁順序，從 0 起算）。 */
+  function occOf(r) {
+    var same = Object.keys(recs).map(function (id) { return recs[id]; }).filter(function (o) {
+      return o.kind !== 'img' && o.t === r.t && o.el.isConnected;
+    });
+    same.sort(function (a, b) {
+      var p = a.el.compareDocumentPosition(b.el);
+      return p & 4 ? -1 : p & 2 ? 1 : a.id - b.id;
+    });
+    return same.indexOf(r);
+  }
+  function trOf(r) {
+    if (ovTexts[r.t]) {
+      var ov = ovTr[ovKey(r.t, occOf(r))];
+      if (ov !== undefined) return ov;
+    }
+    return trByText[r.t];
+  }
+  function applyOv(sid, list) {
+    if (sid !== SID) return;
+    (list || []).forEach(function (it) {
+      var k = ovKey(it.t, it.occ), had = ovTr[k] !== undefined;
+      if (it.tr === null || it.tr === undefined) {
+        if (had) { delete ovTr[k]; if (!--ovTexts[it.t]) delete ovTexts[it.t]; }
+      } else {
+        ovTr[k] = it.tr;
+        if (!had) ovTexts[it.t] = (ovTexts[it.t] || 0) + 1;
+      }
+    });
+    var changed = {};
+    (list || []).forEach(function (it) { changed[it.t] = 1; });
+    Object.keys(recs).forEach(function (id) {
+      var r = recs[id];
+      if (r.kind === 'img' || !changed[r.t]) return;
+      var has = trOf(r) !== undefined;
+      if (has) { r.st = 'done'; paint(r); }
+      else if (r.st === 'done') { r.st = 'new'; paint(r); }
+    });
+  }
+  function watchLongPress(node) {
+    var timer = 0;
+    function cancel() { clearTimeout(timer); timer = 0; }
+    node.addEventListener('touchstart', function () {
+      cancel();
+      timer = setTimeout(function () { timer = 0; openTrMenu(node); }, LONG_PRESS_MS);
+    }, { passive: true });
+    node.addEventListener('touchmove', cancel, { passive: true });
+    node.addEventListener('touchend', cancel, { passive: true });
+    node.addEventListener('touchcancel', cancel, { passive: true });
+    node.addEventListener('contextmenu', function (ev) { ev.preventDefault(); ev.stopPropagation(); }, true);
+  }
+  function openTrMenu(node) {
+    var r = recs[node.__nyFor];
+    if (!r || r.st !== 'done') return;
+    var ctx = [];
+    for (var k = r.id - 1; k > 0 && ctx.length < 2; k--) {
+      if (recs[k] && recs[k].kind !== 'img' && recs[k].el.isConnected) ctx.unshift(recs[k].t);
+    }
+    try { B.trMenu(JSON.stringify({ sid: SID, url: location.href, t: r.t, occ: occOf(r), tr: trOf(r), ctx: ctx })); } catch (e) {}
   }
   function onTrClick(ev) {
     var r = recs[this.__nyFor];
@@ -841,6 +910,8 @@
   }
   function reset() {
     trByText = {};
+    ovTr = {};
+    ovTexts = {};
     trByImg = {};
     Object.keys(recs).forEach(function (id) {
       var r = recs[id];
@@ -907,6 +978,7 @@
     collect: collect,
     translateAll: translateAll,
     reset: reset,
+    applyOv: applyOv,
     page: page,
     stats: stats,
     rescan: function () { scheduleScan(10); },

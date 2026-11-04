@@ -68,6 +68,16 @@ fun AboutScreen(onBack: () -> Unit) {
                         "韓文線上小說的網頁疊翻閱讀器：在站內瀏覽器照常閱讀原網站，譯文直接插在原文下方。",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (BuildConfig.SOURCE_URL.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        HairlineButton("GitHub 專案頁", { open(BuildConfig.SOURCE_URL) })
+                        Text(
+                            BuildConfig.SOURCE_URL.removePrefix("https://"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
             }
             item {

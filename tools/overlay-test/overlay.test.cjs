@@ -50,6 +50,7 @@ const ECHO_BRIDGE = () => {
       setTimeout(() => window.__ny.apply(j.sid, j.items.map((it) => ({ t: it.t, tr: '譯：' + it.t }))), 30);
     },
     page: (s) => window.__pages.push(JSON.parse(s)),
+    trMenu: (s) => (window.__menus = window.__menus || []).push(JSON.parse(s)),
     note: (s) => window.__notes.push(JSON.parse(s).kind),
     image: (s) => {
       const j = JSON.parse(s);
@@ -185,6 +186,39 @@ async function testVolumePaging(browser) {
   await run('body 有 overflow:auto、實際捲視窗（kakaopage）', 'html,body{height:100%}body{overflow-y:auto}', () => window.scrollY);
   await run('html 也有 overflow、body 才是捲動容器', 'html,body{height:100%;overflow:hidden}body{overflow-y:auto}', () => document.body.scrollTop);
   await run('內層容器捲動（bomtoon 電子書型）', 'html,body{height:100%;margin:0;overflow:hidden}#viewer{height:100%;overflow-y:auto}', () => document.getElementById('viewer').scrollTop);
+}
+
+async function testOccurrenceOverride(browser) {
+  console.log('長按譯文：只改這一處');
+  const same = '네.';
+  const body = `<!doctype html><html><body><div id="viewer">` +
+    Array.from({ length: 12 }, (_, i) => `<p id="text_${i}">${i % 4 === 1 ? same : KO(i)}</p>`).join('') + `</div></body></html>`;
+  const page = await openPage(browser, 'https://www.bomtoon.com/viewer/book/4', body, ECHO_BRIDGE);
+  await inject(page, { roots: ['#viewer'], paras: 'p[id^="text_"]', minParas: 3, pathRe: '^/viewer/([^/]+)/([^/]+)/?$', auto: true });
+  await page.waitForTimeout(800);
+  const texts = () => page.evaluate(() => [1, 5, 9].map((i) => document.querySelector('#text_' + i + ' ny-tr').textContent));
+  const press = async (id, ms) => {
+    await page.evaluate((i) => document.querySelector('#text_' + i + ' ny-tr').dispatchEvent(new Event('touchstart', { bubbles: true })), id);
+    await page.waitForTimeout(ms);
+    await page.evaluate((i) => document.querySelector('#text_' + i + ' ny-tr').dispatchEvent(new Event('touchend', { bubbles: true })), id);
+  };
+  await press(5, 200);
+  check('短按不開選單', (await page.evaluate(() => (window.__menus || []).length)) === 0);
+  await press(5, 700);
+  const m = await page.evaluate(() => (window.__menus || [])[0]);
+  check('長按回報原文、第幾次出現、目前譯文', m && m.t === same && m.occ === 1 && m.tr === '譯：' + same, m);
+  check('長按帶前文脈絡', m && m.ctx.length === 2, m);
+  await page.evaluate((sid) => __ny.applyOv(sid, [{ t: '네.', occ: 1, tr: '喔。' }]), m.sid);
+  const a = await texts();
+  check('只改長按的那一處', a[0] === '譯：네.' && a[1] === '喔。' && a[2] === '譯：네.', a);
+  await page.evaluate((i) => { const p = document.getElementById('text_1'); p.parentNode.replaceChild(p.cloneNode(true), p); });
+  await page.waitForTimeout(1300);
+  const b = await page.evaluate(() => [1, 5, 9].map((i) => (document.querySelector('#text_' + i + ' ny-tr') || {}).textContent));
+  check('網頁重繪其他段後仍對應同一處', b[1] === '喔。' && b[2] === '譯：네.', b);
+  await page.evaluate((sid) => __ny.applyOv(sid, [{ t: '네.', occ: 1, tr: null }]), m.sid);
+  const c = await texts();
+  check('恢復共用譯文', c[1] === '譯：네.', c);
+  await page.close();
 }
 
 async function testRidi(browser) {
@@ -349,6 +383,7 @@ async function testAutoRetry(browser) {
     await testFontFollow(browser);
     await testHugeChapter(browser);
     await testVolumePaging(browser);
+    await testOccurrenceOverride(browser);
     await testImagesAndColor(browser);
     await testMarquee(browser);
     await testPagedForceScroll(browser);
