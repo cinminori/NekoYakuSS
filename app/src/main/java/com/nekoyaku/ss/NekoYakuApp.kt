@@ -32,6 +32,8 @@ class NekoYakuApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 必須先於任何 DB／prefs 存取（上面全是 lazy，此時都還沒建）
+        com.nekoyaku.ss.data.backup.BackupManager.applyPendingRestore(this)
         val pkg = runCatching { packageManager.getPackageInfo(packageName, 0) }.getOrNull()
         DebugLog.i(
             "app",

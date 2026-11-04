@@ -30,6 +30,12 @@ interface NekoDao {
     @Query("SELECT COUNT(*) FROM translation")
     suspend fun countTranslations(): Int
 
+    @Query("SELECT COUNT(*) FROM book")
+    suspend fun countBooks(): Int
+
+    @Query("SELECT COUNT(*) FROM glossary")
+    suspend fun countGlossary(): Int
+
     @Query("SELECT COALESCE(SUM(LENGTH(text)), 0) FROM translation")
     suspend fun translationBytes(): Long
 

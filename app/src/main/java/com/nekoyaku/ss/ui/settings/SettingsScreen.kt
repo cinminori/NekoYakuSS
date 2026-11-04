@@ -330,6 +330,8 @@ fun SettingsScreen(
                 }
             }
 
+            item { BackupSection() }
+
             item {
                 Column {
                     SectionLabel("其他", Modifier.padding(top = 28.dp, bottom = 4.dp))

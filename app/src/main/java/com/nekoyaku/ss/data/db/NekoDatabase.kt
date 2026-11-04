@@ -15,14 +15,18 @@ import androidx.room.RoomDatabase
         GlossaryEntity::class,
         ChapterBookEntity::class,
     ],
-    version = 1,
+    version = NekoDatabase.SCHEMA_VERSION,
     exportSchema = false,
 )
 abstract class NekoDatabase : RoomDatabase() {
     abstract fun dao(): NekoDao
 
     companion object {
+        /** 備份還原也用這個判斷版本相容：改 schema 時 bump 這裡。 */
+        const val SCHEMA_VERSION = 1
+        const val DB_NAME = "nekoyaku.db"
+
         fun build(context: Context): NekoDatabase =
-            Room.databaseBuilder(context, NekoDatabase::class.java, "nekoyaku.db").build()
+            Room.databaseBuilder(context, NekoDatabase::class.java, DB_NAME).build()
     }
 }
