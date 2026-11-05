@@ -744,7 +744,7 @@ class TranslationService {
         }
     }
 
-    /** 抓模型清單（設定頁「抓模型」用）。 */
+    /** 抓模型清單（設定頁選模型用）。 */
     suspend fun fetchModels(baseUrl: String, apiKey: String): Result<List<String>> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -761,6 +761,22 @@ class TranslationService {
                 val data = json.parseToJsonElement(body).jsonObject["data"]?.jsonArray
                     ?: error("回傳沒有 data 欄位")
                 data.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.content }.sorted()
+            }
+        }
+
+    /** 測試連線（設定頁用）：真的翻一個詞，連 key、模型、餘額一起驗；回傳譯文。 */
+    suspend fun testConnection(profile: AiProfile): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = ChatRequest(
+                    model = profile.model,
+                    thinking = profile.thinkingParam(),
+                    reasoningEffort = profile.reasoningEffortParam(),
+                    messages = listOf(Message("user", "把「$CONNECTION_TEST_WORD」翻成繁體中文，只回譯文。")),
+                    temperature = 0.3,
+                    maxTokens = 2048,
+                )
+                toTraditional(postChat(profile, body).trim()).ifBlank { error("模型沒有回傳內容") }
             }
         }
 
@@ -1343,6 +1359,7 @@ class TranslationService {
         private val RETRYABLE_HTTP_CODES = listOf(408, 425, 429, 500, 502, 503, 504, 529)
 
         /** 空回應翻倍重試的天花板——再高只是讓 thinking 模型多燒錢，不會生出 content。 */
+        const val CONNECTION_TEST_WORD = "안녕하세요"
         const val MAX_TOKEN_BUDGET = 32_768
 
         /** 413 縮預算的地板：滿批 900 字的譯文＋JSON 包裝約 1500 token，2048 夠用。 */
