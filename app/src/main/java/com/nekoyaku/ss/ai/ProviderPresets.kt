@@ -28,14 +28,9 @@ object ProviderPresets {
             "一組 key 可以用很多家的模型，預付儲值。",
         ),
         ProviderPreset(
-            "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.5-flash",
+            "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.8-flash",
             "https://aistudio.google.com/apikey",
             "Google 的服務，有免費額度（免費方案的資料條款可能不同）。",
-        ),
-        ProviderPreset(
-            "Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile",
-            "https://console.groq.com/keys",
-            "速度快，有免費額度（免費方案的資料條款可能不同）。",
         ),
         ProviderPreset(
             "OpenAI", "https://api.openai.com/v1", "gpt-4o-mini",

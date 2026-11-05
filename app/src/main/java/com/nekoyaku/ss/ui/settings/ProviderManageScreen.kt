@@ -68,7 +68,7 @@ import java.util.UUID
 private const val CUSTOM_SERVICE = "其他（自訂網址）"
 private const val MIN_KEY_LENGTH = 16
 private val NON_CHAT_MODEL = Regex(
-    "embed|whisper|tts|moderation|guard|dall-e|imag|veo|aqa|audio|computer-use|deep-research|antigravity|robotics",
+    "embed|whisper|tts|moderation|guard|dall-e|imag|veo|aqa|audio|computer-use|deep-research|antigravity|robotics|live|transcribe|nano-banana|customtools|lyria",
     RegexOption.IGNORE_CASE,
 )
 
@@ -381,13 +381,13 @@ fun ProviderManageScreen(onBack: () -> Unit) {
                             // 吃掉大量時間與 max_tokens——翻譯有名詞表與規則約束，不需要 chain-of-thought。
                             // 依端點分流：Groq 送 reasoning_effort=none、其他送 thinking=disabled（0.5.54）
                             ToggleHairlineButton(
-                                "關閉思考模式（DeepSeek／Groq Qwen）",
+                                "關閉思考模式（DeepSeek）",
                                 disableThinking,
                                 { disableThinking = !disableThinking },
                                 Modifier.fillMaxWidth(),
                             )
                             HelperText(
-                                "DeepSeek V4 與 Groq 的 Qwen 系預設會先「思考」，翻譯會慢上數倍，還可能回空內容；" +
+                                "DeepSeek V4 預設會先「思考」，翻譯會慢上數倍，還可能回空內容；" +
                                     "選 DeepSeek 時已自動開啟。其他服務請保持關閉。",
                             )
                         }

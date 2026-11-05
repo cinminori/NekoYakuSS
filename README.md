@@ -47,7 +47,6 @@
 | DeepSeek | `https://api.deepseek.com/v1` | 預付儲值制 |
 | OpenRouter | `https://openrouter.ai/api/v1` | 一個 key 可用多家模型，預付儲值制 |
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | 支援看圖（插圖文字翻譯） |
-| Groq | `https://api.groq.com/openai/v1` | |
 | OpenAI | `https://api.openai.com/v1` | |
 | Claude 官方 API | `https://api.anthropic.com/v1` | 自動走原生 Messages API（含 prompt caching） |
 

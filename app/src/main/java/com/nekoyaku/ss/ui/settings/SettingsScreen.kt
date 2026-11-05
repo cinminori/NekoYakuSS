@@ -152,7 +152,7 @@ fun SettingsScreen(
                         Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(
-                        "自備 API key：支援 OpenAI 相容端點（DeepSeek、OpenRouter、Gemini、Groq、OpenAI…）與 Claude 官方 API。" +
+                        "自備 API key：支援 OpenAI 相容端點（DeepSeek、OpenRouter、Gemini、OpenAI…）與 Claude 官方 API。" +
                             "key 只存在這台裝置，翻譯時直接連到你選的服務，不經過任何第三方伺服器。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
