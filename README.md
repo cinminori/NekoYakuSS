@@ -33,6 +33,8 @@
 
 ## 安裝與開始使用
 
+圖文版使用說明（含 API key 申請、費用與各模型官方定價）：[NekoTranslate 使用說明](https://ancient-freckle-1b1.notion.site/NekoTranslate-3076d20adfde800c9e0bf2c8b0e2e133)
+
 1. 到本專案的 Releases 下載 APK 安裝（需允許「安裝不明來源的應用程式」）。
 2. 打開 App → 右上角「設定」→「管理翻譯服務」→ 選一個服務 → 貼上 API key → 確認模型 → 按「測試連線」後儲存。
 3. 回首頁，點想看的網站，在站內瀏覽器登入你的帳號。
