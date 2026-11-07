@@ -26,9 +26,15 @@ import com.nekoyaku.ss.BuildConfig
 import com.nekoyaku.ss.ui.components.HairlineButton
 import com.nekoyaku.ss.ui.components.SectionLabel
 
+/** 圖文使用說明（Notion，與 NekoYaku 共用）。 */
+private const val GUIDE_URL = "https://ancient-freckle-1b1.notion.site/NekoTranslate-3076d20adfde800c9e0bf2c8b0e2e133"
+
+/** 問題回報表單（Google 表單，與 NekoYaku 共用；不需登入）。 */
+private const val REPORT_URL = "https://docs.google.com/forms/d/e/1FAIpQLSe8GFtXynqu5n3bNGtQOceyA9c6cICxKqNuEyeiKcadOrD95w/viewform"
+
 /** 本 App 用到的開源元件（GPL-3.0 與 Apache-2.0 相容）。 */
 private val OPEN_SOURCE = listOf(
-    "AndroidX（Core、Activity、Lifecycle、Navigation、Room、DataStore）" to "Apache-2.0",
+    "AndroidX（Core、Activity、Lifecycle、Navigation、Room）" to "Apache-2.0",
     "Jetpack Compose、Material 3、Material Icons" to "Apache-2.0",
     "Kotlin 標準函式庫、kotlinx.coroutines、kotlinx.serialization" to "Apache-2.0",
     "OkHttp、Okio" to "Apache-2.0",
@@ -78,6 +84,20 @@ fun AboutScreen(onBack: () -> Unit) {
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
+                }
+            }
+            item {
+                Column {
+                    SectionLabel("說明與回報", Modifier.padding(top = 16.dp, bottom = 8.dp))
+                    HairlineButton("圖文使用說明", { open(GUIDE_URL) })
+                    Spacer(Modifier.height(6.dp))
+                    HairlineButton("回報問題／建議功能", { open(REPORT_URL) })
+                    Text(
+                        "回報表單不需要登入；請不要在表單裡填 API key。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
             item {
