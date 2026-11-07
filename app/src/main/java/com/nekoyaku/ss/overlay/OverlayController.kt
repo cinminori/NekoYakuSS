@@ -60,6 +60,8 @@ data class OverlayStatus(
     /** 長章節分段抽名詞時的進度（第幾段／共幾段）；只有一段時 total＝1。 */
     val extractStep: Int = 0,
     val extractTotal: Int = 0,
+    /** 一般提示（不是錯誤），例如自動加進名詞表的詞數；翻譯開始時不會被清掉，換頁或按「知道了」才清。 */
+    val notice: String? = null,
     val message: String? = null,
     /** 這一話所屬的書名（中文譯名優先）；網頁標題常常不是書名（kakaopage 是「추천 | 카카오페이지」）。 */
     val title: String = "",
@@ -867,6 +869,8 @@ class OverlayController(
                 cands.map { GlossaryEntity(ch.bookId, it.term, it.zh, "", true, it.type, now) },
             )
             DebugLog.i("overlay", "名詞抽取：既有 ${prior.size} 詞，新增 ${cands.size} 詞")
+            // AI 抽的詞直接當正式譯名用：要讓讀者知道，譯名怪怪的時才知道去名詞表改
+            _status.update { it.copy(notice = "已自動把 ${cands.size} 個新名詞加進名詞表；譯名不對可以在名詞表修改。") }
             return cands.size
         } finally {
             _status.update { it.copy(extractingGlossary = false, extractStep = 0, extractTotal = 0) }
@@ -903,7 +907,8 @@ class OverlayController(
     /** 目前這一話所屬的書（名詞表、書籍設定用）。 */
     suspend fun currentBookId(): String? = chapterOf(topUrl)?.bookId
 
-    fun clearMessage() = _status.update { it.copy(message = null) }
+    /** 「知道了」：先收掉錯誤訊息，沒有錯誤時收掉一般提示。 */
+    fun clearMessage() = _status.update { if (it.message != null) it.copy(message = null) else it.copy(notice = null) }
 
     companion object {
         const val BRIDGE_NAME = "NekoYaku"

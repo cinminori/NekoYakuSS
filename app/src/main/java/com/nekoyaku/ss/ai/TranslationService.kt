@@ -67,21 +67,39 @@ private data class ConsultPayload(val term: String, val sentence: String)
 
 /**
  * profile 勾了「關閉思考模式」才送 `"thinking":{"type":"disabled"}`（DeepSeek 式），否則整個欄位不出現。
- * Groq 端點不認 thinking 物件 → 改送 [reasoningEffortParam]，這裡回 null。
+ * Groq／OpenAI／Gemini 端點不認 thinking 物件 → 改送 [reasoningEffortParam]，這裡回 null。
  */
 private fun AiProfile.thinkingParam(): TranslationService.ThinkingConfig? =
-    if (disableThinking && !isGroqEndpoint) TranslationService.ThinkingConfig("disabled") else null
+    if (disableThinking && !usesReasoningEffort) TranslationService.ThinkingConfig("disabled") else null
 
 /**
- * Groq 的關思考參數：qwen3 系預設 thinking、`<think>` 吐在 content 把 max_tokens 吃光
- * （2026-07-19 評比實錄），要帶 `"reasoning_effort":"none"` 關掉。只在 Groq 端點＋勾了
- * 「關閉思考模式」才送；不支援此參數的 Groq 模型會 400 浮出（取消勾選即可，不做自動降級）。
+ * OpenAI 式關思考參數 `"reasoning_effort":"none"`：Groq qwen3 系預設 thinking、`<think>` 吐在 content
+ * 把 max_tokens 吃光（2026-07-19 評比實錄）；gpt-6-luna 不關思考就只收 temperature=1。
+ * 不支援此參數的模型（gpt-4o-mini 等）由 [TranslationService.postChatAdaptive] 拿掉重試。
  */
 private fun AiProfile.reasoningEffortParam(): String? =
-    if (disableThinking && isGroqEndpoint) "none" else null
+    if (disableThinking && usesReasoningEffort) "none" else null
+
+private val OPTIONAL_PARAMS = listOf("temperature", "reasoning_effort", "thinking")
+
+/** 400 錯誤指名 [bodyJson] 裡有送的選配欄位就回它的名字（拿掉重試），否則 null。 */
+internal fun rejectedOptionalParam(errorMessage: String, bodyJson: String): String? {
+    if (!errorMessage.contains("HTTP 400")) return null
+    val sent = Json.parseToJsonElement(bodyJson).jsonObject.keys
+    return OPTIONAL_PARAMS.firstOrNull { it in sent && errorMessage.contains(it) }
+}
+
+internal fun withoutParams(bodyJson: String, params: Set<String>): String {
+    if (params.isEmpty()) return bodyJson
+    val obj = Json.parseToJsonElement(bodyJson).jsonObject
+    return kotlinx.serialization.json.JsonObject(obj - params).toString()
+}
 
 class TranslationService {
     private val json = Json { ignoreUnknownKeys = true }
+
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val lenientJson = Json { ignoreUnknownKeys = true; allowTrailingComma = true }
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
     // 全域 LLM 請求限流：前景整章翻譯＋背景預載共用同一個閥，同時在飛的請求總數不超過上限。
@@ -913,19 +931,28 @@ class TranslationService {
     // 之後同 profile+model 第一發就帶對參數。
     private val wantsCompletionTokens = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
+    // 同套路：400 指名不收的選配欄位（gpt-6-luna 只收 temperature=1、gpt-4o-mini 不認 reasoning_effort、
+    // 未知端點不認 thinking）就拿掉重試並記住。
+    private val droppedParams = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+
     private suspend fun postChatAdaptive(profile: AiProfile, tally: UsageTally? = null, encode: (useCompletionParam: Boolean) -> String): String {
         val key = "${profile.baseUrl}|${profile.model}"
-        val preferNew = key in wantsCompletionTokens
-        return try {
-            postChatJson(profile, encode(preferNew), tally)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            if (!preferNew && e.message.orEmpty().contains("max_completion_tokens")) {
-                wantsCompletionTokens.add(key)
-                DebugLog.i("trans", "模型要求 max_completion_tokens，切換參數重試並記住（${profile.model}）")
-                postChatJson(profile, encode(true), tally)
-            } else {
-                throw e
+        while (true) {
+            val preferNew = key in wantsCompletionTokens
+            val body = withoutParams(encode(preferNew), droppedParams[key].orEmpty())
+            try {
+                return postChatJson(profile, body, tally)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                val msg = e.message.orEmpty()
+                if (!preferNew && msg.contains("max_completion_tokens")) {
+                    wantsCompletionTokens.add(key)
+                    DebugLog.i("trans", "模型要求 max_completion_tokens，切換參數重試並記住（${profile.model}）")
+                    continue
+                }
+                val reject = rejectedOptionalParam(msg, body) ?: throw e
+                droppedParams.merge(key, setOf(reject)) { a, b -> a + b }
+                DebugLog.i("trans", "模型不收 $reject，拿掉重試並記住（${profile.model}）")
             }
         }
     }
@@ -1009,7 +1036,14 @@ class TranslationService {
         } catch (e: Exception) {
             // 只記形狀（每筆的欄位名與字串長度），不記內容——診斷「模型改用別的欄位名」用（0.5.88）
             DebugLog.w("trans", "譯文陣列形狀：${arrayShape(arr)}")
-            throw TranslationFormatException("翻譯 API JSON 格式錯誤", e)
+            // 物件結尾多逗號、陣列多一個 ] 之類（0.2.6 實測 Gemini／Luna 都有）：逐物件搶救，
+            // 下面段落數與 id 檢查照舊，湊不齊整批才算格式錯誤
+            val salvaged = Regex("\\{[^{}]*\\}").findAll(arr)
+                .mapNotNull { m -> runCatching { lenientJson.decodeFromString<TranslationOutput>(m.value) }.getOrNull() }
+                .toList()
+            if (salvaged.size != original.size) throw TranslationFormatException("翻譯 API JSON 格式錯誤", e)
+            DebugLog.w("trans", "譯文陣列壞掉，逐物件搶救 ${salvaged.size} 段")
+            salvaged
         }
         if (items.size != original.size || items.map { it.id }.toSet().size != items.size) {
             throw TranslationFormatException("翻譯 API 段落數量或 id 不一致")
@@ -1025,6 +1059,10 @@ class TranslationService {
             val maxLength = maxOf(500, original[id].length * 4 + 100)
             if (translated.length > maxLength) {
                 throw TranslationFormatException("段落 id=$id 譯文長度異常")
+            }
+            // 模型把韓／日文原文照抄回來：收下會寫進快取，之後每次開都是原文。當格式錯誤走重試／拆批
+            if (translated == original[id].trim() && UNTRANSLATED_LETTERS.containsMatchIn(translated)) {
+                throw TranslationFormatException("段落 id=$id 譯文與原文相同")
             }
             replaceLiteraryWords(toTraditional(normalizePunctuation(translated)))
         }
@@ -1477,6 +1515,8 @@ class TranslationService {
             }
             return (listOf(t) + parts + given).distinct()
         }
+        /** 譯文裡出現就代表沒翻（諺文、假名）；漢字不算，原文是漢字專名時照抄是正常的。 */
+        private val UNTRANSLATED_LETTERS = Regex("[\\uAC00-\\uD7A3\\u3131-\\u318E\\u3040-\\u30FF]")
         const val MAX_GLOSSARY_VALUE_LENGTH = 40
         /** 譯注比詞長：名詞表畫面可寫三行、問譯法回 200 字內；超過就截斷，不整條丟。 */
         const val MAX_GLOSSARY_NOTE_LENGTH = 200

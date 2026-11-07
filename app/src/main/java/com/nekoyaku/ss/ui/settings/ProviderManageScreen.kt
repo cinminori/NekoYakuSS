@@ -109,20 +109,24 @@ fun ProviderManageScreen(onBack: () -> Unit) {
 
     val preset = ProviderPresets.ALL.firstOrNull { it.name == service }
     val isCustom = service == CUSTOM_SERVICE
+    // 每個服務各自記住這次貼過的 key：不小心點到別家再點回來，剛貼的 key 還在
+    val keyByService = remember { mutableMapOf<String, String>() }
 
     fun clearForm() {
         editingId = null; service = null; name = ""; baseUrl = ""; apiKey = ""; model = ""
         disableThinking = false; showKey = false; showAdvanced = false
         models = emptyList(); modelsStatus = null; testStatus = null
+        keyByService.clear()
     }
 
     fun chooseService(next: String) {
         if (next == service) return
+        service?.let { if (apiKey.isNotBlank()) keyByService[it] = apiKey }
         val nextPreset = ProviderPresets.ALL.firstOrNull { it.name == next }
         if (name.isBlank() || name == preset?.name) name = nextPreset?.name.orEmpty()
         service = next
         baseUrl = nextPreset?.baseUrl.orEmpty()
-        apiKey = ""
+        apiKey = keyByService[next].orEmpty()
         model = nextPreset?.sampleModel.orEmpty()
         disableThinking = nextPreset?.disableThinking ?: false
         models = emptyList(); modelsStatus = null; saveStatus = null
@@ -236,7 +240,7 @@ fun ProviderManageScreen(onBack: () -> Unit) {
                         editingId = p.id; name = p.name; baseUrl = p.baseUrl
                         apiKey = p.apiKey; model = p.model; disableThinking = p.disableThinking
                         service = ProviderPresets.matching(p.baseUrl)?.name ?: CUSTOM_SERVICE
-                        showKey = false; saveStatus = null
+                        showKey = false; saveStatus = null; keyByService.clear()
                         scope.launch { listState.scrollToItem(1 + profiles.size) }
                     }) {
                         Icon(Icons.Filled.Edit, contentDescription = "編輯", tint = MaterialTheme.colorScheme.onSurfaceVariant)

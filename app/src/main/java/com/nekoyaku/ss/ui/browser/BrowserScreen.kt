@@ -55,6 +55,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -132,6 +135,21 @@ fun BrowserScreen(
     }
     LaunchedEffect(Unit) {
         app.pageScrollRequest.collect { dir -> if (sheet == null) controller.page(dir) }
+    }
+    // App 退到背景：停網頁的 JS 計時器與動畫省電（翻譯在 Kotlin 端照跑，回前景再套上）
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, webView) {
+        val wv = webView ?: return@DisposableEffect onDispose {}
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> { wv.onPause(); wv.pauseTimers(); DebugLog.i("browser", "退到背景，WebView 暫停") }
+                Lifecycle.Event.ON_START -> { wv.onResume(); wv.resumeTimers(); DebugLog.i("browser", "回到前景，WebView 恢復") }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        // pauseTimers 是整個 process 的 WebView 共用，離開時一定要放回來
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); wv.resumeTimers() }
     }
 
     BackHandler {
@@ -244,7 +262,7 @@ fun BrowserScreen(
                         }
                     },
                 )
-                status.message?.let { msg ->
+                (status.message ?: status.notice)?.let { msg ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -256,6 +274,11 @@ fun BrowserScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (status.message == null) {
+                            TextButton(onClick = {
+                                scope.launch { controller.currentBookId()?.let { sheet = GLOSSARY_SHEET + it } }
+                            }) { Text("名詞表") }
+                        }
                         TextButton(onClick = { controller.clearMessage() }) { Text("知道了") }
                     }
                 }

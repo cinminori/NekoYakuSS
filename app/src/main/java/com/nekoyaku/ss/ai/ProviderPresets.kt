@@ -31,11 +31,13 @@ object ProviderPresets {
             "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.8-flash",
             "https://aistudio.google.com/apikey",
             "Google 的服務，有免費額度（免費方案的資料條款可能不同）。",
+            disableThinking = true,
         ),
         ProviderPreset(
             "OpenAI", "https://api.openai.com/v1", "gpt-6-luna",
             "https://platform.openai.com/api-keys",
             "API 與 ChatGPT 訂閱分開計費，有訂閱也要另外儲值。",
+            disableThinking = true,
         ),
         // Claude 官方 API：自動走原生 /v1/messages（含 prompt caching，見 AnthropicBridge）
         ProviderPreset(

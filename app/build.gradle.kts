@@ -30,8 +30,8 @@ android {
         applicationId = "com.nekoyaku.ss"
         minSdk = 26
         targetSdk = 34 // 35 在部分 e-ink ROM 上會讓 WebView 渲染子進程「process is bad」起不來
-        versionCode = 20
-        versionName = "0.2.5"
+        versionCode = 21
+        versionName = "0.2.6"
         vectorDrawables { useSupportLibrary = true }
 
         // WebView CDP 除錯（chrome://inspect）。公開版一律 false——開著等於讓 adb 端

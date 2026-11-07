@@ -32,8 +32,12 @@ data class AiProfile(
      */
     val disableThinking: Boolean = false,
 ) {
-    /** Groq 端點：`thinking` 物件不認得、關思考要走 OpenAI 式 `reasoning_effort`（見 [disableThinking]）。 */
-    val isGroqEndpoint: Boolean get() = baseUrl.contains("groq.com", ignoreCase = true)
+    /**
+     * Groq／OpenAI／Gemini 端點：`thinking` 物件一律 400（2026-11-07 實測），關思考要走 OpenAI 式
+     * `reasoning_effort`（見 [disableThinking]）。
+     */
+    val usesReasoningEffort: Boolean get() = listOf("groq.com", "api.openai.com", "generativelanguage.googleapis.com")
+        .any { baseUrl.contains(it, ignoreCase = true) }
 }
 
 /** 用 SharedPreferences 持久化 profile 清單與目前選擇；以 StateFlow 對 Compose 反應式暴露。 */

@@ -3,6 +3,7 @@ package com.nekoyaku.ss.data.backup
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Build
 import com.nekoyaku.ss.BuildConfig
@@ -58,6 +59,7 @@ object BackupManager {
     private const val TAG = "backup"
     private const val ENTRY_MANIFEST = "manifest.json"
     private const val DB_NAME = NekoDatabase.DB_NAME
+    private val REQUIRED_TABLES = setOf("translation", "book", "glossary", "chapter_book")
     private const val PREFS_OVERLAY = "overlay_settings"
     private const val PREFS_AI = "ai_profiles"
     private const val ENTRY_PREFS_OVERLAY = "prefs/$PREFS_OVERLAY.json"
@@ -252,6 +254,7 @@ object BackupManager {
             }
             val stagedDb = File(pending, DB_NAME)
             check(isSqlite(stagedDb)) { "備份檔裡的資料庫已損毀" }
+            check(isIntactDb(stagedDb)) { "備份檔裡的資料庫不完整或已損毀，沒有還原" }
             File(pending, READY_MARKER).writeText(manifest.createdAt.toString())
             p.report("完成", total, total)
         } catch (t: Throwable) {
@@ -266,6 +269,20 @@ object BackupManager {
         f.inputStream().use { it.read(head) }
         return head.contentEquals(SQLITE_HEADER)
     }
+
+    /**
+     * 檔頭之外再確認整個資料庫讀得通、該有的表都在：寫到一半的備份檔頭也完好，
+     * 不擋下來的話還原後 Room 開庫失敗、原本的資料又已被換掉，每次開 App 都閃退。
+     */
+    private fun isIntactDb(f: File): Boolean = runCatching {
+        SQLiteDatabase.openDatabase(f.path, null, SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS).use { db ->
+            val ok = db.rawQuery("PRAGMA quick_check", null).use { it.moveToFirst() && it.getString(0) == "ok" }
+            val tables = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'", null).use { c ->
+                buildSet { while (c.moveToNext()) add(c.getString(0)) }
+            }
+            ok && REQUIRED_TABLES.all { it in tables }
+        }
+    }.getOrDefault(false)
 
     /**
      * 啟動時套用待還原資料。必須在任何人碰 DB／SharedPreferences 之前呼叫（Application.onCreate 第一行）。

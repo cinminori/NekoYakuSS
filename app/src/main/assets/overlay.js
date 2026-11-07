@@ -1000,12 +1000,18 @@
     }
   };
   configure(cfgIn);
-  // 正文還沒出現前密集一點找（SPA／shadow root 晚掛上不會觸發 MutationObserver），找到後放慢
+  // 正文還沒出現前密集一點找（SPA／shadow root 晚掛上不會觸發 MutationObserver），找到後放慢；
+  // 連續幾輪沒找到新段落就再拉長間隔（最多 4 倍），換網址或段落數變了馬上回到原速。背景分頁整個停。
+  var idleScans = 0, lastRecCount = 0;
   setInterval(function () {
+    if (document.hidden) return;
     autoRetry();
     syncFontSizes();
+    var n = Object.keys(recs).length;
+    if (n !== lastRecCount || location.href !== lastHref) { lastRecCount = n; idleScans = 0; }
     var gap = Date.now() - lastScanAt;
-    if ((Object.keys(recs).length === 0 && onChapter()) || gap > (onChapter() ? 2000 : 1500)) scheduleScan(10);
+    var dense = n === 0 && onChapter() && idleScans < 20;
+    if (dense || gap > (onChapter() ? 2000 : 1500) * Math.min(1 + idleScans, 4)) { idleScans++; scheduleScan(10); }
   }, 700);
   return 'ok';
 })();
