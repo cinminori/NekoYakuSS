@@ -270,7 +270,7 @@ fun ProviderManageScreen(onBack: () -> Unit) {
                         }
                     }
                     if (service == null) {
-                        HelperText("不確定的話，DeepSeek 便宜且預付儲值不會超支；Gemini 有免費額度可以先試。")
+                        HelperText("不確定的話，Gemini 有免費額度可以先試；想便宜又順可以選 OpenAI。各家費用比較在關於頁的使用說明裡。")
                     }
                     preset?.let { HelperText(it.note) }
                     if (isCustom) {

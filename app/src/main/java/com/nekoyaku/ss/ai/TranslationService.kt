@@ -163,7 +163,7 @@ class TranslationService {
         val note = bookNote?.trim()?.takeIf { it.isNotEmpty() }?.take(1500)
         val withNote = if (note == null) base else "$base\n\n本書背景設定（使用者提供，翻譯時遵循）：\n$note"
         // 名詞表放 system 尾端（0.5.56）：整本書每一批的 system 都一字不差 → DeepSeek／Gemini 等
-        // 前綴快取整段命中（hit 單價是 miss 的 1/120）。排在 note 之後：改名詞表只讓尾段失效。
+        // 前綴快取整段命中（命中價約原價 1/30～1/50，2026-11 官方價）。排在 note 之後：改名詞表只讓尾段失效。
         if (glossary.isEmpty()) return withNote
         return "$withNote\n\nglossary（固定譯名表，規則 4 所指的對照表）：\n${systemGlossaryBlock(glossary)}"
     }

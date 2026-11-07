@@ -15,11 +15,11 @@ data class ProviderPreset(
 
 object ProviderPresets {
     val ALL = listOf(
-        // DeepSeek／OpenRouter 排前面：預付儲值制（花完就停、不會爆卡），分享給非技術朋友時的推薦路線
+        // DeepSeek／OpenRouter 排前面：預付儲值制（花完就停），分享給非技術朋友時的推薦路線
         ProviderPreset(
             "DeepSeek", "https://api.deepseek.com/v1", "deepseek-v4-pro",
             "https://platform.deepseek.com/api_keys",
-            "預付儲值，用完就停，不會超支。",
+            "預付儲值，用完就停。",
             disableThinking = true,
         ),
         ProviderPreset(
@@ -33,7 +33,7 @@ object ProviderPresets {
             "Google 的服務，有免費額度（免費方案的資料條款可能不同）。",
         ),
         ProviderPreset(
-            "OpenAI", "https://api.openai.com/v1", "gpt-4o-mini",
+            "OpenAI", "https://api.openai.com/v1", "gpt-6-luna",
             "https://platform.openai.com/api-keys",
             "API 與 ChatGPT 訂閱分開計費，有訂閱也要另外儲值。",
         ),
