@@ -165,6 +165,24 @@ async function testHugeChapter(browser) {
   await page.close();
 }
 
+async function testResetAutoOff(browser) {
+  console.log('自動翻譯關閉時按「重新翻譯本話」：翻過的段落直接重送');
+  const body = `<!doctype html><html><body><div id="viewer">` +
+    Array.from({ length: 20 }, (_, i) => `<p id="text_${i}">${KO(i)}</p>`).join('') + `</div></body></html>`;
+  const page = await openPage(browser, 'https://www.bomtoon.com/viewer/book/3', body, ECHO_BRIDGE);
+  await inject(page, { roots: ['#viewer'], paras: 'p[id^="text_"]', minParas: 3, pathRe: '^/viewer/([^/]+)/([^/]+)/?$', auto: false });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => __ny.translateAll());
+  await page.waitForTimeout(600);
+  const before = await page.evaluate(() => __reqs.reduce((n, q) => n + q.items.length, 0));
+  await page.evaluate(() => __ny.reset());
+  await page.waitForTimeout(600);
+  const r = await page.evaluate(() => ({ stats: JSON.parse(__ny.stats()), sent: __reqs.reduce((n, q) => n + q.items.length, 0) }));
+  check('重送了原本翻過的段落', r.sent - before === 20, { before, ...r });
+  check('重新翻完', r.stats.done === 20 && r.stats.pending === 0, r.stats);
+  await page.close();
+}
+
 async function testVolumePaging(browser) {
   console.log('音量鍵翻頁：捲到真正會動的容器');
   const paras = Array.from({ length: 60 }, (_, i) => `<p id="text_${i}" style="font-size:18px">${KO(i)}</p>`).join('');
@@ -412,6 +430,7 @@ async function testAutoRetry(browser) {
     await testRidi(browser);
     await testFontFollow(browser);
     await testHugeChapter(browser);
+    await testResetAutoOff(browser);
     await testVolumePaging(browser);
     await testOccurrenceOverride(browser);
     await testTranslationFont(browser);

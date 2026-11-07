@@ -917,14 +917,18 @@
     ovTr = {};
     ovTexts = {};
     trByImg = {};
-    Object.keys(recs).forEach(function (id) {
+    // 自動翻譯關著時 observe 不會送出：剛才翻過（或正在翻、失敗）的段落要直接重送，不然按了重新翻譯只看到譯文消失
+    var redo = [];
+    Object.keys(recs).map(Number).sort(function (a, b) { return a - b; }).forEach(function (id) {
       var r = recs[id];
+      if (!cfg.auto && r.st !== 'new' && r.el.isConnected) redo.push(r);
       if (r.node && r.node.parentNode) r.node.parentNode.removeChild(r.node);
       r.node = null;
       r.st = 'new';
       unobserve(r);
       observe(r);
     });
+    redo.forEach(function (r) { if (r.kind === 'img') requestImg(r); else enqueue(r); });
   }
   /** 音量鍵翻頁：找出正文所在的捲動容器，捲一個畫面（不用平滑捲動，e-ink 少殘影）。 */
   /** html／body 的 overflow 會傳給視窗（html 沒設 overflow 時 body 的才會傳）：這時對它們捲動沒有作用，要捲視窗。 */
