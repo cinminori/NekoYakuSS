@@ -1186,7 +1186,7 @@ class TranslationService {
             val safeZh = sanitizeGlossaryValue(g.zh) ?: return@mapNotNull null
             // type 只允許短標籤；note 有填才送、過不了消毒就丟 note 留詞
             val safeType = g.type.trim().take(8).takeIf { t -> t.isNotEmpty() && t.none { it.isISOControl() } }.orEmpty()
-            val safeNote = g.note.trim().takeIf { it.isNotEmpty() }?.let { sanitizeGlossaryValue(it) }.orEmpty()
+            val safeNote = sanitizeGlossaryNote(g.note).orEmpty()
             GlossaryTerm(safeTerm, safeZh, safeType, safeNote)
         }
 
@@ -1202,6 +1202,14 @@ class TranslationService {
         val value = raw.trim()
         if (value.length !in 1..MAX_GLOSSARY_VALUE_LENGTH) return null
         if (value.any { it.isISOControl() }) return null
+        if (FORBIDDEN_GLOSSARY_MARKERS.any(value::contains)) return null
+        return value
+    }
+
+    /** 譯注：換行併成空白、超長截斷；仍含標記就不送（詞本身照送）。 */
+    private fun sanitizeGlossaryNote(raw: String): String? {
+        val value = raw.replace(Regex("\\s+"), " ").trim().take(MAX_GLOSSARY_NOTE_LENGTH)
+        if (value.isEmpty() || value.any { it.isISOControl() }) return null
         if (FORBIDDEN_GLOSSARY_MARKERS.any(value::contains)) return null
         return value
     }
@@ -1349,14 +1357,26 @@ class TranslationService {
          * API 層可重試錯誤：限流／配額，或 HTTP 408/425/429/5xx。
          * 狀態碼比對綁 "http {code}" 前綴——舊版直接找 "500"/"502" 子字串會被
          * IP、port、回應內文誤中（如 port 50029、錯誤訊息裡的數字）。
+         * 限流字樣要比整個詞：單找 "rate" 會誤中 Gemini 404 的 "generateContent"。
          */
         internal fun isRetryableApiError(message: String?): Boolean {
             val m = (message ?: "").lowercase()
-            if ("rate" in m || "quota" in m) return true
+            if (isOutOfCredit(m)) return false
+            if (RATE_LIMIT_HINTS.any { it in m }) return true
             return RETRYABLE_HTTP_CODES.any { "http $it" in m }
         }
 
+        /** 餘額／額度用完（OpenAI 也回 429）：重試只會一直失敗，要讓使用者去儲值。 */
+        internal fun isOutOfCredit(message: String?): Boolean {
+            val m = (message ?: "").lowercase()
+            return OUT_OF_CREDIT_HINTS.any { it in m }
+        }
+
         private val RETRYABLE_HTTP_CODES = listOf(408, 425, 429, 500, 502, 503, 504, 529)
+        private val RATE_LIMIT_HINTS = listOf(
+            "rate limit", "rate_limit", "ratelimit", "too many requests", "quota exceeded", "resource_exhausted",
+        )
+        private val OUT_OF_CREDIT_HINTS = listOf("insufficient_quota", "insufficient balance", "insufficient_balance")
 
         /** 空回應翻倍重試的天花板——再高只是讓 thinking 模型多燒錢，不會生出 content。 */
         const val CONNECTION_TEST_WORD = "안녕하세요"
@@ -1456,6 +1476,8 @@ class TranslationService {
             return (listOf(t) + parts + given).distinct()
         }
         const val MAX_GLOSSARY_VALUE_LENGTH = 40
+        /** 譯注比詞長：名詞表畫面可寫三行、問譯法回 200 字內；超過就截斷，不整條丟。 */
+        const val MAX_GLOSSARY_NOTE_LENGTH = 200
         const val SPLIT_REQUEST_GAP_MS = 700L
         // ⚠️ 要跟 extractGlossary prompt 的 type 集合同步——v0.3.4 加「稱呼」時漏了這裡，AI 抽的稱呼全被默默丟掉
         val ALLOWED_GLOSSARY_TYPES = setOf("人名", "地名", "組織", "稱呼", "設定")

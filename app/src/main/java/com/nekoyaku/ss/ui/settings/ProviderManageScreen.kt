@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import com.nekoyaku.ss.NekoYakuApp
 import com.nekoyaku.ss.ai.AiProfile
 import com.nekoyaku.ss.ai.ProviderPresets
+import com.nekoyaku.ss.ai.friendlyApiError
 import com.nekoyaku.ss.ui.components.HairlineButton
 import com.nekoyaku.ss.ui.components.InkButton
 import com.nekoyaku.ss.ui.components.SectionLabel
@@ -149,7 +150,7 @@ fun ProviderManageScreen(onBack: () -> Unit) {
                 if (model == preset?.sampleModel && models.none { it.removePrefix("models/") == model }) model = ""
                 modelsStatus = FormStatus("已取得 ${models.size} 個模型。")
             },
-            onFailure = { modelsStatus = FormStatus(friendlyError(it), isError = true) },
+            onFailure = { modelsStatus = FormStatus(friendlyApiError(it), isError = true) },
         )
     }
     LaunchedEffect(baseUrl, apiKey, model, disableThinking) { testStatus = null }
@@ -345,7 +346,7 @@ fun ProviderManageScreen(onBack: () -> Unit) {
                                 scope.launch {
                                     translator.testConnection(formProfile()).fold(
                                         onSuccess = { testStatus = FormStatus("測試成功，模型回覆：${it.take(40)}") },
-                                        onFailure = { testStatus = FormStatus(friendlyError(it), isError = true) },
+                                        onFailure = { testStatus = FormStatus(friendlyApiError(it), isError = true) },
                                     )
                                     testing = false
                                 }
@@ -446,21 +447,4 @@ private fun StatusText(status: FormStatus) {
         style = MaterialTheme.typography.bodySmall,
         color = if (status.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
     )
-}
-
-/** 把 HTTP 錯誤翻成白話；看不懂的狀況保留原訊息方便回報。 */
-private fun friendlyError(e: Throwable): String {
-    val message = e.message.orEmpty()
-    val code = Regex("HTTP (\\d{3})").find(message)?.groupValues?.get(1)?.toInt()
-    val hint = when {
-        code == null -> return if (e is java.io.IOException) "連不上服務，請檢查網路或網址。" else message.take(200)
-        code == 401 || code == 403 -> "API Key 不正確或沒有權限，請重新複製一次。"
-        code == 402 -> "帳戶餘額不足，請到服務網站儲值。"
-        code == 400 -> "服務拒絕了這次請求，請確認 API Key 與模型是否正確。"
-        code == 404 -> "找不到這個模型或網址，請重新選擇模型。"
-        code == 429 -> "超過用量限制或額度已用完，請稍後再試，或到服務網站查看額度。"
-        code >= 500 -> "服務暫時有問題，請稍後再試。"
-        else -> "連線失敗。"
-    }
-    return "$hint（HTTP $code）"
 }

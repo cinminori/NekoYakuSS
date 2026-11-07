@@ -7,6 +7,9 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import com.nekoyaku.ss.NekoYakuApp
 import com.nekoyaku.ss.ai.GlossaryTerm
+import com.nekoyaku.ss.ai.NETWORK_ERROR_HINT
+import com.nekoyaku.ss.ai.TranslationService
+import com.nekoyaku.ss.ai.friendlyApiError
 import com.nekoyaku.ss.ai.UsageTally
 import com.nekoyaku.ss.data.db.GlossaryEntity
 import com.nekoyaku.ss.data.db.GlossaryRepository
@@ -20,14 +23,18 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
@@ -103,6 +110,9 @@ class OverlayController(
     /** 同一段正在翻的（cacheKey → 等著套用的 sid），避免同段重複送。 */
     private val inFlight = HashMap<String, MutableSet<String>>()
     private val inFlightLock = Any()
+
+    /** 每一話正在翻的工作（gateKey → Job，同受 [inFlightLock] 保護）：重新翻譯本話時要先取消，否則舊譯文會寫回來。 */
+    private val chapterJobs = HashMap<String, MutableSet<Job>>()
 
     /** 每一話的名詞預抽（同一話只跑一次；翻譯要等它好）。 */
     private val glossaryGate = HashMap<String, Deferred<Unit>>()
@@ -226,13 +236,20 @@ class OverlayController(
     private fun failOnPage(sid: String, ids: List<Int>, msg: String) {
         if (ids.isEmpty()) return
         val auto = isTransient(msg)
-        val shown = if (auto) "網路不穩" else msg.take(40)
+        val shown = if (auto) "網路不穩" else friendlyError(msg).take(60)
         js("window.__ny&&__ny.fail('${jsStr(sid)}',${ids.joinToString(",", "[", "]")},'${jsStr(shown)}',$auto)")
+    }
+
+    /** 讀者看得懂的錯誤（同設定頁的白話說明）；沒有 HTTP 碼的斷網類錯誤也換成白話。 */
+    private fun friendlyError(raw: String?): String {
+        val msg = raw?.takeIf { it.isNotBlank() } ?: return "翻譯失敗"
+        return if (isTransient(msg) && !msg.contains("HTTP ")) NETWORK_ERROR_HINT else friendlyApiError(msg)
     }
 
     /** 暫時性錯誤（斷網、DNS、逾時、限流、伺服器忙）：網頁端 20 秒後自動重送。 */
     private fun isTransient(msg: String): Boolean {
         val m = msg.lowercase()
+        if (TranslationService.isOutOfCredit(m)) return false
         return listOf(
             "unable to resolve host", "timeout", "timed out", "failed to connect", "connection reset",
             "connection refused", "network", "http 429", "http 500", "http 502", "http 503", "http 504",
@@ -728,6 +745,8 @@ class OverlayController(
         }
         if (todo.isEmpty()) return
 
+        val job = currentCoroutineContext().job
+        synchronized(inFlightLock) { chapterJobs.getOrPut(ch.gateKey) { mutableSetOf() }.add(job) }
         _status.update { it.copy(translating = it.translating + todo.size, message = null) }
         try {
             glossaryGateFor(ch, req.sid).await()
@@ -748,6 +767,8 @@ class OverlayController(
                 val pairs = indices.indices.associate { k -> paragraphs[indices[k]] to translated[k] }
                 synchronized(delivered) { delivered.addAll(indices) }
                 scope.launch {
+                    // 這一話已按「重新翻譯」：舊譯文不寫回
+                    if (job.isCancelled) return@launch
                     cache.save(ch.site.id, ch.bookKey, ch.chapterKey, pairs)
                     applyToPage(finishWaiters(ch, pairs.keys), pairs)
                     _status.update { it.copy(translating = (it.translating - pairs.size).coerceAtLeast(0), translated = it.translated + pairs.size) }
@@ -755,9 +776,8 @@ class OverlayController(
             }
             val failed = todo.filterIndexed { idx, _ -> idx !in delivered }
             if (failed.isNotEmpty()) {
-                val msg = err?.substringAfter("：")?.take(60) ?: "翻譯失敗"
-                reportFailed(ch, failed, msg)
-                _status.update { it.copy(message = "部分段落翻譯失敗：${err?.take(120) ?: "未知錯誤"}") }
+                reportFailed(ch, failed, err ?: "翻譯失敗")
+                _status.update { it.copy(message = "部分段落翻譯失敗：${friendlyError(err)}") }
             }
         } catch (e: Exception) {
             if (e is CancellationException) {
@@ -765,8 +785,10 @@ class OverlayController(
                 throw e
             }
             DebugLog.e("overlay", "翻譯失敗：${e.message?.take(160)}", e)
-            reportFailed(ch, todo, e.message?.take(40) ?: "翻譯失敗")
-            _status.update { it.copy(message = "翻譯失敗：${e.message?.take(120)}") }
+            reportFailed(ch, todo, e.message ?: "翻譯失敗")
+            _status.update { it.copy(message = "翻譯失敗：${friendlyError(e.message)}") }
+        } finally {
+            synchronized(inFlightLock) { chapterJobs[ch.gateKey]?.remove(job) }
         }
     }
 
@@ -832,7 +854,7 @@ class OverlayController(
         try {
             val book = app.cacheRepository.getBook(ch.site.id, ch.bookKey)
             val prior = app.glossaryRepository.confirmedMap(ch.bookId)
-            val cands = app.translationService.extractGlossary(all, profile, prior, book?.promptNote)
+            val cands = app.translationService.extractGlossary(all, profile, prior, book?.promptNote, stableKnown = prior)
             if (cands.isEmpty()) return 0
             val now = System.currentTimeMillis()
             app.glossaryRepository.autoAdoptAsConfirmed(
@@ -863,6 +885,11 @@ class OverlayController(
     /** 選單「重新翻譯本話」：清掉這一話的譯文快取，網頁上的譯文拿掉重來。 */
     suspend fun retranslateChapter(): String {
         val ch = chapterOf(topUrl) ?: return "這一頁不是可疊翻的章節頁"
+        // 先停掉還在翻的批次：不然它們回來會把舊譯文寫回剛清空的快取，新請求也會被 inFlight 擋成「等舊的」
+        val running = synchronized(inFlightLock) { chapterJobs.remove(ch.gateKey)?.toList().orEmpty() }
+        running.forEach { it.cancel() }
+        running.joinAll()
+        _status.update { it.copy(translating = 0) }
         app.cacheRepository.clearChapter(ch.site.id, ch.bookKey, ch.chapterKey)
         js("window.__ny&&__ny.reset()")
         return "已清除本話譯文，重新翻譯中"

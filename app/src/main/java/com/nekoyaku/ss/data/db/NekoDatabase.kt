@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
         ChapterBookEntity::class,
     ],
     version = NekoDatabase.SCHEMA_VERSION,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class NekoDatabase : RoomDatabase() {
     abstract fun dao(): NekoDao

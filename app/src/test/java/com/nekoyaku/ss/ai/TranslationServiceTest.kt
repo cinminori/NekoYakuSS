@@ -152,6 +152,25 @@ class TranslationServiceTest {
         assertEquals(false, TranslationService.isRetryableApiError("翻譯 API 失敗 HTTP 400：bad request"))
         // 舊版會被 port 裡的 "500" 誤判成可重試
         assertEquals(false, TranslationService.isRetryableApiError("Failed to connect to 10.0.0.5:50029"))
+        // Gemini 模型名錯誤的 404 含 "generateContent"，舊版單找 "rate" 會誤判
+        assertEquals(false, TranslationService.isRetryableApiError(
+            "翻譯 API 失敗 HTTP 404：models/x is not found for API version v1beta, or is not supported for generateContent",
+        ))
+        // OpenAI 沒儲值也回 429，重試沒用
+        assertEquals(false, TranslationService.isRetryableApiError(
+            "翻譯 API 失敗 HTTP 429：{\"error\":{\"code\":\"insufficient_quota\"}}",
+        ))
+    }
+
+    /** 譯注超過詞長上限也要送：換行併成空白、超長截斷，不整條丟。 */
+    @Test
+    fun systemGlossaryBlock_keepsLongNote() {
+        val note45 = "兩人是同期入團的隊友，私下互稱名字，公開場合才用職稱稱呼對方，翻譯時要依場合切換。"
+        val block = service.systemGlossaryBlock(listOf(GlossaryTerm("형", "哥", "稱呼", "$note45\n第二行")))
+        assertEquals(true, "$note45 第二行" in block)
+        val long = service.systemGlossaryBlock(listOf(GlossaryTerm("형", "哥", "稱呼", "註".repeat(300))))
+        assertEquals(true, "註".repeat(TranslationService.MAX_GLOSSARY_NOTE_LENGTH) in long)
+        assertEquals(false, "註".repeat(TranslationService.MAX_GLOSSARY_NOTE_LENGTH + 1) in long)
     }
 
     /** 0.5.54：Groq 429 訊息帶「Please try again in Xs」→ 照供應商指示等（＋緩衝、有上下限）。 */
