@@ -57,6 +57,9 @@ data class OverlayStatus(
     val translated: Int = 0,
     val fromCache: Int = 0,
     val extractingGlossary: Boolean = false,
+    /** 長章節分段抽名詞時的進度（第幾段／共幾段）；只有一段時 total＝1。 */
+    val extractStep: Int = 0,
+    val extractTotal: Int = 0,
     val message: String? = null,
     /** 這一話所屬的書名（中文譯名優先）；網頁標題常常不是書名（kakaopage 是「추천 | 카카오페이지」）。 */
     val title: String = "",
@@ -854,7 +857,9 @@ class OverlayController(
         try {
             val book = app.cacheRepository.getBook(ch.site.id, ch.bookKey)
             val prior = app.glossaryRepository.confirmedMap(ch.bookId)
-            val cands = app.translationService.extractGlossary(all, profile, prior, book?.promptNote, stableKnown = prior)
+            val cands = app.translationService.extractGlossary(
+                all, profile, prior, book?.promptNote, stableKnown = prior,
+            ) { k, n -> _status.update { it.copy(extractStep = k, extractTotal = n) } }
             if (cands.isEmpty()) return 0
             val now = System.currentTimeMillis()
             app.glossaryRepository.autoAdoptAsConfirmed(
@@ -864,7 +869,7 @@ class OverlayController(
             DebugLog.i("overlay", "名詞抽取：既有 ${prior.size} 詞，新增 ${cands.size} 詞")
             return cands.size
         } finally {
-            _status.update { it.copy(extractingGlossary = false) }
+            _status.update { it.copy(extractingGlossary = false, extractStep = 0, extractTotal = 0) }
         }
     }
 

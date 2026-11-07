@@ -490,6 +490,7 @@ class TranslationService {
         srcLang: String = "ko",
         tally: UsageTally? = null,
         stableKnown: Map<String, String>? = null,
+        onWindow: ((index: Int, total: Int) -> Unit)? = null,
     ): List<GlossaryCandidate> =
         withContext(Dispatchers.IO) {
             if (paragraphs.isEmpty()) return@withContext emptyList()
@@ -504,6 +505,7 @@ class TranslationService {
             val out = mutableListOf<GlossaryCandidate>()
             val step = if (nWindows == 1) 0 else (full.length - EXTRACT_WINDOW_CHARS).coerceAtLeast(0) / (nWindows - 1)
             for (w in 0 until nWindows) {
+                onWindow?.invoke(w + 1, nWindows)
                 val start = w * step
                 val text = full.substring(start, (start + EXTRACT_WINDOW_CHARS).coerceAtMost(full.length))
                 val cands = runCatching { extractGlossaryWindow(text, profile, known, bookNote, srcLang, tally, stableKnown) }

@@ -108,6 +108,7 @@ fun SettingsScreen(
     var ahead by remember { mutableStateOf(s.aheadScreens) }
     var screenMode by remember { mutableStateOf(s.screenMode) }
     var volumePaging by remember { mutableStateOf(s.volumeKeyPaging) }
+    var hideStatusBar by remember { mutableStateOf(s.hideStatusBar) }
     var stats by remember { mutableStateOf<Pair<Int, Long>?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(0) }
@@ -301,6 +302,9 @@ fun SettingsScreen(
                     }
                     SwitchRow("音量鍵翻頁", "閱讀章節時，音量鍵上／下捲動一個畫面（無平滑捲動，減少殘影）。", volumePaging) {
                         volumePaging = it; s.volumeKeyPaging = it
+                    }
+                    SwitchRow("看書時隱藏手機狀態列", "在站內瀏覽器裡隱藏最上方的時間、電量列，畫面多一點空間；從螢幕上緣往下滑可以暫時叫出來。", hideStatusBar) {
+                        hideStatusBar = it; s.hideStatusBar = it
                     }
                     Text(
                         "顯示設定在下次打開章節時套用。",

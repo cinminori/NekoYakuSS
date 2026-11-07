@@ -56,6 +56,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.nekoyaku.ss.BuildConfig
 import com.nekoyaku.ss.NekoYakuApp
 import com.nekoyaku.ss.overlay.OverlayController
@@ -102,6 +105,19 @@ fun BrowserScreen(
     var busy by remember { mutableStateOf(false) }
     // 蓋在瀏覽器上的頁面（名詞表／設定）：不導航離開，WebView 和進行中的翻譯才不會被拆掉
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
+    var hideStatusBar by remember { mutableStateOf(ovs.hideStatusBar) }
+    // 看書時隱藏手機最上方的狀態列；從上緣往下滑可暫時叫出來，離開瀏覽器就恢復
+    DisposableEffect(hideStatusBar) {
+        val window = ctx.findActivity()?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        if (hideStatusBar) {
+            bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars?.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            bars?.show(WindowInsetsCompat.Type.statusBars())
+        }
+        onDispose { bars?.show(WindowInsetsCompat.Type.statusBars()) }
+    }
 
     val site = SiteRegistry.forUrl(currentUrl)
     val reading = status.active
@@ -353,6 +369,7 @@ fun BrowserScreen(
                     // 設定可能改了自動翻譯、字級、字型等：重新套到目前這頁（overlay.js 重複注入＝只更新設定）
                     auto = ovs.autoTranslate
                     uiOn = ovs.uiTranslate
+                    hideStatusBar = ovs.hideStatusBar
                     controller.inject()
                     null
                 }
@@ -378,6 +395,12 @@ fun BrowserScreen(
     }
 }
 
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 private const val GLOSSARY_SHEET = "glossary:"
 private const val SETTINGS_SHEET = "settings"
 private const val PROVIDERS_SHEET = "providers"
@@ -390,7 +413,8 @@ private const val CONFIRM_TRANSLATE_ALL_PARAS = 500
 private fun statusLine(s: com.nekoyaku.ss.overlay.OverlayStatus, support: SupportLevel?, reading: Boolean): String = when {
     support == null -> "非支援網站：只能瀏覽"
     !reading -> "打開任一話即自動疊翻（${support.label}）"
-    s.extractingGlossary -> "抽取專有名詞中…"
+    s.extractingGlossary && s.extractTotal > 1 -> "抽取專有名詞中（第 ${s.extractStep}／${s.extractTotal} 段），抽完才開始翻譯…"
+    s.extractingGlossary -> "抽取專有名詞中，抽完才開始翻譯…"
     s.translating > 0 -> "翻譯中 ${s.translating} 段｜已翻 ${s.translated}｜快取 ${s.fromCache}"
     s.translated + s.fromCache > 0 -> "已翻 ${s.translated} 段｜快取 ${s.fromCache} 段"
     else -> "疊翻待命（${support.label}）"

@@ -89,6 +89,11 @@ class OverlaySettings(context: Context) {
         get() = prefs.getBoolean(KEY_FIX_PAGED, true)
         set(v) = prefs.edit().putBoolean(KEY_FIX_PAGED, v).apply()
 
+    /** 站內瀏覽器裡隱藏手機最上方的狀態列（時間、電量）。 */
+    var hideStatusBar: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_STATUS_BAR, false)
+        set(v) = prefs.edit().putBoolean(KEY_HIDE_STATUS_BAR, v).apply()
+
     /** 書名沒有中文譯名時自動翻一次（只填空白、不覆蓋手動填的）。 */
     var autoTitle: Boolean
         get() = prefs.getBoolean(KEY_AUTO_TITLE, true)
@@ -144,6 +149,7 @@ class OverlaySettings(context: Context) {
         const val KEY_AHEAD = "ahead"
         const val KEY_SCREEN = "screen_mode"
         const val KEY_VOLUME = "volume_paging"
+        const val KEY_HIDE_STATUS_BAR = "hide_status_bar"
         val EINK_HINTS = listOf(
             "hibreak", "bigme", "boox", "onyx", "eink", "e-ink", "e_ink",
             "supernote", "remarkable", "likebook", "pocketbook", "dasung", "meebook",
