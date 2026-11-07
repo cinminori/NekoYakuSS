@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -62,6 +63,11 @@ import com.nekoyaku.ss.overlay.TrEdit
 import com.nekoyaku.ss.site.SiteRegistry
 import com.nekoyaku.ss.site.SupportLevel
 import com.nekoyaku.ss.ui.components.Hairline
+import com.nekoyaku.ss.ui.debug.DebugScreen
+import com.nekoyaku.ss.ui.glossary.GlossaryScreen
+import com.nekoyaku.ss.ui.settings.AboutScreen
+import com.nekoyaku.ss.ui.settings.ProviderManageScreen
+import com.nekoyaku.ss.ui.settings.SettingsScreen
 import com.nekoyaku.ss.util.DebugLog
 import kotlinx.coroutines.launch
 
@@ -74,8 +80,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun BrowserScreen(
     initialUrl: String,
-    onOpenGlossary: (bookId: String) -> Unit,
-    onOpenSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -87,7 +91,7 @@ fun BrowserScreen(
     val mode by ovs.mode.collectAsState()
     var auto by remember { mutableStateOf(ovs.autoTranslate) }
     var uiOn by remember { mutableStateOf(ovs.uiTranslate) }
-    // rememberSaveable：從瀏覽器進名詞表／設定再回來時 WebView 會重建，要回到剛才那一頁而不是起始頁
+    // rememberSaveable：Activity 重建（旋轉、被系統回收）時 WebView 會重建，要回到剛才那一頁而不是起始頁
     var currentUrl by rememberSaveable { mutableStateOf(initialUrl) }
     var pageTitle by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -96,12 +100,14 @@ fun BrowserScreen(
     var confirmRetranslate by remember { mutableStateOf<Int?>(null) }
     var showBookNote by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    // 蓋在瀏覽器上的頁面（名詞表／設定）：不導航離開，WebView 和進行中的翻譯才不會被拆掉
+    var sheet by rememberSaveable { mutableStateOf<String?>(null) }
 
     val site = SiteRegistry.forUrl(currentUrl)
     val reading = status.active
 
     // 音量鍵翻頁：只在章節頁收
-    LaunchedEffect(reading) { app.isReading.value = reading }
+    LaunchedEffect(reading, sheet) { app.isReading.value = reading && sheet == null }
     DisposableEffect(Unit) {
         onDispose {
             app.isReading.value = false
@@ -109,7 +115,7 @@ fun BrowserScreen(
         }
     }
     LaunchedEffect(Unit) {
-        app.pageScrollRequest.collect { dir -> controller.page(dir) }
+        app.pageScrollRequest.collect { dir -> if (sheet == null) controller.page(dir) }
     }
 
     BackHandler {
@@ -173,7 +179,9 @@ fun BrowserScreen(
                                 })
                                 DropdownMenuItem(text = { Text("名詞表") }, onClick = {
                                     menuOpen = false
-                                    scope.launch { controller.currentBookId()?.let(onOpenGlossary) ?: toast("還沒辨識出這一話屬於哪本書") }
+                                    scope.launch {
+                                        controller.currentBookId()?.let { sheet = GLOSSARY_SHEET + it } ?: toast("還沒辨識出這一話屬於哪本書")
+                                    }
                                 })
                                 DropdownMenuItem(text = { Text("從本話抽取名詞") }, enabled = !busy, onClick = {
                                     menuOpen = false
@@ -215,7 +223,7 @@ fun BrowserScreen(
                             })
                             DropdownMenuItem(text = { Text("設定") }, onClick = {
                                 menuOpen = false
-                                onOpenSettings()
+                                sheet = SETTINGS_SHEET
                             })
                         }
                     },
@@ -338,7 +346,43 @@ fun BrowserScreen(
             dismissButton = { TextButton(onClick = { confirmTranslateAll = null }) { Text("取消") } },
         )
     }
+    sheet?.let { s ->
+        fun close() {
+            sheet = when (s) {
+                SETTINGS_SHEET -> {
+                    // 設定可能改了自動翻譯、字級、字型等：重新套到目前這頁（overlay.js 重複注入＝只更新設定）
+                    auto = ovs.autoTranslate
+                    uiOn = ovs.uiTranslate
+                    controller.inject()
+                    null
+                }
+                PROVIDERS_SHEET, ABOUT_SHEET, DEBUG_SHEET -> SETTINGS_SHEET
+                else -> null
+            }
+        }
+        BackHandler { close() }
+        Surface(Modifier.fillMaxSize()) {
+            when (s) {
+                SETTINGS_SHEET -> SettingsScreen(
+                    onBack = ::close,
+                    onOpenDebug = { sheet = DEBUG_SHEET },
+                    onOpenProviders = { sheet = PROVIDERS_SHEET },
+                    onOpenAbout = { sheet = ABOUT_SHEET },
+                )
+                PROVIDERS_SHEET -> ProviderManageScreen(onBack = ::close)
+                ABOUT_SHEET -> AboutScreen(onBack = ::close)
+                DEBUG_SHEET -> DebugScreen(onBack = ::close)
+                else -> GlossaryScreen(bookId = s.removePrefix(GLOSSARY_SHEET), onBack = ::close)
+            }
+        }
+    }
 }
+
+private const val GLOSSARY_SHEET = "glossary:"
+private const val SETTINGS_SHEET = "settings"
+private const val PROVIDERS_SHEET = "providers"
+private const val ABOUT_SHEET = "about"
+private const val DEBUG_SHEET = "debug"
 
 /** 「翻譯整頁」超過這個段數先問一聲（一般連載一話約一兩百段，電子書型可達數千段）。 */
 private const val CONFIRM_TRANSLATE_ALL_PARAS = 500

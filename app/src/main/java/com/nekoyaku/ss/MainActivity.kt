@@ -69,8 +69,6 @@ fun NekoYakuNavHost() {
                 ?: SiteRegistry.all().first().homeUrl
             BrowserScreen(
                 initialUrl = url,
-                onOpenGlossary = { bookId -> nav.navigate("glossary/${Uri.encode(bookId)}") },
-                onOpenSettings = { nav.navigate("settings") },
                 onBack = { nav.popBackStack() },
             )
         }
